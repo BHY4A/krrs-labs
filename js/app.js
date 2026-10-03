@@ -31,8 +31,20 @@
     logo: true, explain: true, listings: false, readable: true, watermark: true, codePlain: true
   };
   function loadT() { let t = null; try { t = JSON.parse(localStorage.getItem('ep-title') || 'null'); } catch (e) { t = null; } S.T = Object.assign({}, T_DEF, t || {}); }
-  function saveT() { try { localStorage.setItem('ep-title', JSON.stringify(S.T)); } catch (e) { /* ignore */ } }
-  function save() { try { localStorage.setItem('ep-lr-state', JSON.stringify({ P: S.P, tab: S.tab })); } catch (e) { /* хранилище недоступно */ } }
+  function saveT() { try { localStorage.setItem('ep-title', JSON.stringify(S.T)); } catch (e) { /* ignore */ } autoSave(); }
+  function save() { try { localStorage.setItem('ep-lr-state', JSON.stringify({ P: S.P, tab: S.tab })); } catch (e) { /* хранилище недоступно */ } autoSave(); }
+  /* автосохранение: снимок после каждого изменения (с задержкой); загрузка слота его не перезаписывает */
+  let autoTimer = null;
+  function autoSave(now) {
+    if (S.skipAuto) { S.skipAuto = false; return; }
+    clearTimeout(autoTimer);
+    const run = () => {
+      if (!S.P || !S.T) return;
+      try { localStorage.setItem('ep-autosave', JSON.stringify({ name: 'Автосохранение', at: Date.now(), mo: S.R && S.R.lr1 ? S.R.lr1.mo.type : '', tab: S.tab, P: S.P, T: S.T })); } catch (e) { return; }
+      const row = $('#slot-auto'); if (row) row.outerHTML = autoRowHtml(), bindAuto();
+    };
+    if (now) run(); else autoTimer = setTimeout(run, 1200);
+  }
   function load() {
     let st = null;
     try { st = JSON.parse(localStorage.getItem('ep-lr-state') || 'null'); } catch (e) { st = null; }
@@ -213,13 +225,23 @@
     const mo = sl.mo ? ' · ' + esc(sl.mo) : '';
     return `Вариант ${sl.P.variant}${mo}${sl.T && sl.T.student ? ' · ' + esc(sl.T.student) : ''} · ${pad(d.getDate())}.${pad(d.getMonth() + 1)}.${d.getFullYear()} ${pad(d.getHours())}:${pad(d.getMinutes())}`;
   }
+  function getAuto() { try { return JSON.parse(localStorage.getItem('ep-autosave') || 'null'); } catch (e) { return null; } }
+  function autoRowHtml() {
+    const sl = getAuto();
+    return `<div class="opt slot auto" id="slot-auto"><div class="opt-t"><b><i class="slot-no">А</i>Автосохранение</b><span>${sl ? slotMeta(sl) + ' · обновляется само после каждого изменения; загрузка слота его не затирает' : 'Появится после первого изменения'}</span></div><div class="opt-c slot-act">${sl ? '<button class="btn primary" id="slot-auto-load">Загрузить</button>' : ''}</div></div>`;
+  }
+  function bindAuto() {
+    const b = $('#slot-auto-load'); if (!b) return;
+    b.onclick = () => { const sl = getAuto(); if (!sl) return; S.P = Object.assign(L.defaults(), sl.P); S.T = Object.assign({}, T_DEF, sl.T || {}); S.skipAuto = true; saveT(); S.skipAuto = true; recompute(); toast('Загружено автосохранение'); };
+  }
   function slotsHtml() {
-    return getSlots().map((sl, k) => `<div class="opt slot${sl ? '' : ' empty'}"><div class="opt-t"><b><i class="slot-no">${k + 1}</i>${sl ? esc(sl.name) : 'Пустой слот'}</b><span>${sl ? slotMeta(sl) : 'Сохраните сюда текущее состояние'}</span></div><div class="opt-c slot-act">
+    return autoRowHtml() + getSlots().map((sl, k) => `<div class="opt slot${sl ? '' : ' empty'}"><div class="opt-t"><b><i class="slot-no">${k + 1}</i>${sl ? esc(sl.name) : 'Пустой слот'}</b><span>${sl ? slotMeta(sl) : 'Сохраните сюда текущее состояние'}</span></div><div class="opt-c slot-act">
       <button class="btn" data-slot-save="${k}">${sl ? 'Перезаписать' : 'Сохранить'}</button>${sl ? `<button class="btn primary" data-slot-load="${k}">Загрузить</button><button class="btn icon-x" data-slot-del="${k}" title="Удалить" aria-label="Удалить слот ${k + 1}">✕</button>` : ''}</div></div>`).join('');
   }
   function bindSlots() {
     const box = $('#slots'); if (!box) return;
     const redraw = () => { box.innerHTML = slotsHtml(); bindSlots(); };
+    bindAuto();
     $$('[data-slot-save]', box).forEach(b => b.onclick = () => {
       const k = +b.dataset.slotSave, a = getSlots();
       const def = a[k] ? a[k].name : 'Вариант ' + S.P.variant + (S.T.student ? ' — ' + S.T.student : '');
@@ -229,8 +251,9 @@
     });
     $$('[data-slot-load]', box).forEach(b => b.onclick = () => {
       const sl = getSlots()[+b.dataset.slotLoad]; if (!sl) return;
-      S.P = Object.assign(L.defaults(), sl.P); S.T = Object.assign({}, T_DEF, sl.T || {}); saveT();
-      recompute(); toast('Загружено: ' + sl.name);
+      autoSave(true);   // зафиксировать текущую работу перед загрузкой
+      S.P = Object.assign(L.defaults(), sl.P); S.T = Object.assign({}, T_DEF, sl.T || {}); S.skipAuto = true; saveT();
+      S.skipAuto = true; recompute(); toast('Загружено: ' + sl.name);
     });
     $$('[data-slot-del]', box).forEach(b => b.onclick = () => {
       const k = +b.dataset.slotDel, a = getSlots(); if (!a[k] || !confirm('Удалить сохранение «' + a[k].name + '»?')) return;
@@ -319,7 +342,7 @@
         </section>
         <section class="dsec">
           <h2>5. Сохранения</h2>
-          <p class="dlead">Текущее состояние запоминается в браузере автоматически и восстанавливается при следующем открытии. Чтобы держать несколько наборов (например, свой вариант и вариант одногруппника), сохраните их в слоты: в слот попадают все параметры, выбранные элементы, методика расчёта и данные отчёта.</p>
+          <p class="dlead">Текущее состояние запоминается автоматически и восстанавливается при следующем открытии сайта; отдельно ведётся автосохранение — к нему можно вернуться, если загрузили не тот слот. Чтобы держать несколько наборов (например, свой вариант и вариант одногруппника), сохраните их в слоты: в слот попадают все параметры, выбранные элементы, методика расчёта и данные отчёта.</p>
           <div class="opts slots" id="slots">${slotsHtml()}</div>
           <div class="dact"><button class="btn" id="slots-exp">${dlIcon()} Экспорт в файл</button><label class="btn" for="slots-imp-f">Импорт из файла</label><input type="file" id="slots-imp-f" accept=".json,application/json" hidden></div>
           <p class="dhint">Слоты хранятся только в этом браузере на этом устройстве. Чтобы перенести их на другое устройство или не потерять при очистке браузера, сохраните файл экспорта.</p>
@@ -1032,7 +1055,7 @@ ${parts.join('\n')}</body></html>`;
     let el = $('#toast'); if (!el) { el = document.createElement('div'); el.id = 'toast'; el.className = 'toast'; el.setAttribute('role', 'status'); document.body.appendChild(el); }
     el.textContent = t; el.hidden = false; clearTimeout(toastT); toastT = setTimeout(() => { el.hidden = true; }, 2600);
   }
-  function go(tab) { S.tab = tab; save(); setHash(); renderTab(); window.scrollTo({ top: 0 }); }
+  function go(tab) { S.tab = tab; S.skipAuto = true; save(); setHash(); renderTab(); window.scrollTo({ top: 0 }); }
   function themeToggle() {
     const r = document.documentElement;
     const cur = r.getAttribute('data-theme') || (matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light');
@@ -1054,7 +1077,30 @@ ${parts.join('\n')}</body></html>`;
     const setTopH = () => document.documentElement.style.setProperty('--top-h', $('.top').offsetHeight + 'px');
     window.addEventListener('resize', setTopH); setTopH();
     load(); loadT();
-    recompute();
+    const au = getAuto();
+    if (au && au.P) {
+      // начинаем с чистого состояния и предлагаем вернуться к автосохранению
+      S.P = L.fromVariant(1); S.T = Object.assign({}, T_DEF); S.tab = 'data';
+      S.skipAuto = true; recompute();
+      askResume(au);
+    } else { S.skipAuto = true; recompute(); }
+  }
+  function askResume(au) {
+    const d = document.createElement('div');
+    d.className = 'modal-back';
+    d.innerHTML = `<div class="modal" role="dialog" aria-modal="true" aria-labelledby="rs-t"><h2 id="rs-t">Продолжить с того места?</h2>
+      <p>Найдено автосохранение:</p><div class="modal-card"><b>${au.T && au.T.student ? esc(au.T.student) : 'Последняя работа'}</b><span>${slotMeta(au)}</span></div>
+      <p class="dhint">«Начать заново» сбросит параметры и настройки к значениям по умолчанию. Автосохранение при этом не удаляется — к нему можно вернуться в разделе «Сохранения», пока вы не начнёте вносить изменения.</p>
+      <div class="modal-act"><button class="btn" id="rs-new">Начать заново</button><button class="btn primary" id="rs-go">Продолжить</button></div></div>`;
+    document.body.appendChild(d);
+    const close = () => d.remove();
+    $('#rs-go', d).onclick = () => {
+      S.P = Object.assign(L.defaults(), au.P); S.T = Object.assign({}, T_DEF, au.T || {});
+      if (au.tab) S.tab = au.tab;
+      S.skipAuto = true; saveT(); S.skipAuto = true; close(); recompute();
+    };
+    $('#rs-new', d).onclick = () => { S.skipAuto = true; saveT(); close(); toast('Начато заново'); };
+    setTimeout(() => $('#rs-go', d).focus(), 30);
   }
   if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', init); else init();
 })();

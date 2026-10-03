@@ -386,3 +386,15 @@ details.adv > .in { padding: 0 14px 14px; border-top: 1px solid var(--line); }
 .btn.icon-x { padding: 7px 10px; }
 label.btn { cursor: pointer; }
 @media (max-width: 720px) { .slot { grid-template-columns: 1fr; } .slot .opt-c { justify-self: start; } }
+
+.slot.auto { background: var(--sheet-2); }
+.slot.auto .slot-no { background: var(--accent-2); border-color: var(--accent-2); color: #fff; }
+
+/* окно «продолжить?» */
+.modal-back { position: fixed; inset: 0; z-index: 100; background: rgba(10, 18, 28, .45); display: grid; place-items: center; padding: 16px; }
+.modal { width: min(460px, 100%); background: var(--sheet); color: var(--fg); border: 1px solid var(--line); border-radius: 10px; box-shadow: 0 18px 50px rgba(0,0,0,.25); padding: 20px 22px 18px; }
+.modal h2 { margin: 0 0 10px; font: 700 19px/1.25 var(--f-disp); }
+.modal p { margin: 0 0 8px; }
+.modal-card { display: flex; flex-direction: column; gap: 2px; padding: 10px 12px; border: 1px dashed var(--line-strong); border-radius: var(--r); background: var(--calc-bg); margin: 4px 0 10px; }
+.modal-card span { font-size: 13px; color: var(--muted); }
+.modal-act { display: flex; justify-content: flex-end; gap: 8px; margin-top: 14px; flex-wrap: wrap; }
