@@ -26,11 +26,11 @@
   const S = { P: null, R: null, sims: {}, tab: 'data', err: null, T: null };
   const T_DEF = {
     org: 'МИНОБРНАУКИ РОССИИ\nФедеральное государственное бюджетное образовательное учреждение\nвысшего образования\n«Казанский национальный исследовательский технологический университет»\n(ФГБОУ ВО «КНИТУ»)',
-    dept: '', discipline: 'Системы управления электроприводов', kind: 'лабораторной работе', kindPlural: 'лабораторным работам',
+    dept: '', discipline: 'Конструирование роботов и робототехнических систем', kind: 'лабораторной работе', kindPlural: 'лабораторным работам',
     group: '741-15', student: '', teacher: 'Малев Н. А.', city: 'Казань', year: String(new Date().getFullYear()),
     logo: true, explain: true, listings: false, readable: true, watermark: true, codePlain: true
   };
-  function loadT() { let t = null; try { t = JSON.parse(localStorage.getItem('ep-title') || 'null'); } catch (e) { t = null; } S.T = Object.assign({}, T_DEF, t || {}); }
+  function loadT() { let t = null; try { t = JSON.parse(localStorage.getItem('ep-title') || 'null'); } catch (e) { t = null; } S.T = Object.assign({}, T_DEF, t || {}); if (S.T.discipline === 'Системы управления электроприводов') S.T.discipline = T_DEF.discipline; }
   function saveT() { try { localStorage.setItem('ep-title', JSON.stringify(S.T)); } catch (e) { /* ignore */ } autoSave(); }
   function save() { try { localStorage.setItem('ep-lr-state', JSON.stringify({ P: S.P, tab: S.tab })); } catch (e) { /* хранилище недоступно */ } autoSave(); }
   /* автосохранение: снимок после каждого изменения (с задержкой); загрузка слота его не перезаписывает */
@@ -48,8 +48,12 @@
   function load() {
     let st = null;
     try { st = JSON.parse(localStorage.getItem('ep-lr-state') || 'null'); } catch (e) { st = null; }
-    const h = (location.hash || '').match(/^#v(\d+)(?:-(lr\d|data))?$/);
-    if (h) {
+    const h = (location.hash || '').match(/^#v(\d+)(?:-(lr\d|data))?(?:&s=([\w-]+))?$/);
+    if (h && h[3]) {   // ссылка «поделиться»: вариант + все правки
+      const v = Math.min(222, Math.max(1, +h[1]));
+      let diff = {}; try { diff = JSON.parse(decodeURIComponent(escape(atob(h[3].replace(/-/g, '+').replace(/_/g, '/'))))); } catch (e) { diff = {}; }
+      S.P = Object.assign(L.fromVariant(v), diff); S.tab = h[2] || 'data'; S.shared = true;
+    } else if (h) {
       const v = Math.min(222, Math.max(1, +h[1]));
       S.P = (st && st.P && st.P.variant === v) ? Object.assign(L.defaults(), st.P) : L.fromVariant(v);
       S.tab = h[2] || (st && st.tab) || 'data';
@@ -127,7 +131,7 @@
     const fab = $('#toc-fab'); if (fab) fab.remove();
     const pop = $('#toc-pop'); if (pop) pop.remove();
     if (!tocList.length) return;
-    const links = tocList.map(it => `<a href="#${it.id}" data-toc="${it.id}"><span class="tn">${it.no || '↓'}</span><span>${esc(it.t)}</span></a>`).join('');
+    const links = tocList.map(it => `<a href="#${it.id}" data-toc="${it.id}"><span class="tn">${it.no || (it.el.classList.contains('files') ? '↓' : '·')}</span><span>${esc(it.t)}</span></a>`).join('');
     const cur = $(`nav.rail a[data-tab="${S.tab}"]`);
     if (cur) cur.insertAdjacentHTML('afterend', `<div class="rail-toc" aria-label="Разделы">${links}</div>`);
     // мобильная кнопка «Разделы»
@@ -140,16 +144,28 @@
       const el = document.getElementById(a.dataset.toc); if (!el) return;
       const off = (parseFloat(getComputedStyle(document.documentElement).getPropertyValue('--top-h')) || 64) + (window.innerWidth <= 960 ? 60 : 16);
       window.scrollTo({ top: el.getBoundingClientRect().top + window.scrollY - off, behavior: 'smooth' });
+      tocLock = a.dataset.toc; markToc(tocLock);
       p.hidden = true; f.setAttribute('aria-expanded', 'false');
     });
     spy();
   }
+  // выбранный в оглавлении пункт остаётся подсвеченным, пока пользователь сам не прокрутит страницу
+  let tocLock = null;
+  ['wheel', 'touchmove', 'keydown', 'mousedown'].forEach(ev => window.addEventListener(ev, e => { if (tocLock && !(e.target.closest && e.target.closest('[data-toc]'))) { tocLock = null; } }, { passive: true }));
+  function markToc(act) {
+    $$('[data-toc]').forEach(a => a.classList.toggle('on', a.dataset.toc === act));
+  }
   function spy() {
     if (!tocList.length) return;
+    if (tocLock) { markToc(tocLock); return; }
     const lim = window.innerWidth <= 960 ? 150 : 110;
     let act = tocList[0].id;
     for (const it of tocList) { if (it.el.getBoundingClientRect().top - lim <= 0) act = it.id; else break; }
-    $$('[data-toc]').forEach(a => a.classList.toggle('on', a.dataset.toc === act));
+    // внизу страницы короткие последние разделы не могут дойти до верха — берём последний видимый заголовок
+    if (window.innerHeight + window.scrollY >= document.documentElement.scrollHeight - 4) {
+      for (const it of tocList) { const r = it.el.getBoundingClientRect(); if (r.top < window.innerHeight * 0.6 && !it.el.classList.contains('files')) act = it.id; }
+    }
+    markToc(act);
     const on = $('.rail-toc a.on'), box = $('nav.rail');
     if (on && box && box.scrollHeight > box.clientHeight) { const r = on.getBoundingClientRect(), b = box.getBoundingClientRect(); if (r.top < b.top || r.bottom > b.bottom) on.scrollIntoView({ block: 'nearest' }); }
   }
@@ -265,6 +281,36 @@
   function sw(key) {
     return `<label class="sw"><input type="checkbox" data-tkey="${key}" ${S.T[key] ? 'checked' : ''}><span class="track" aria-hidden="true"></span><span class="sr">вкл.</span></label>`;
   }
+  /* ---------- подсказка над блоками ССДМ ---------- */
+  (function () {
+    let tip = null;
+    const show = (g, x, y) => {
+      if (!tip) { tip = document.createElement('div'); tip.className = 'tipbox'; tip.setAttribute('role', 'tooltip'); document.body.appendChild(tip); }
+      const [nm, d] = g.dataset.tip.split('|');
+      tip.innerHTML = `<small>Блок в Simulink</small><b>${esc(nm)}</b>${d ? `<span>${esc(d)}</span>` : ''}`;
+      tip.style.display = 'block';
+      const w = tip.offsetWidth, h = tip.offsetHeight;
+      tip.style.left = Math.max(8, Math.min(window.innerWidth - w - 8, x - w / 2)) + 'px';
+      tip.style.top = (y - h - 12 < 8 ? y + 18 : y - h - 12) + 'px';
+    };
+    const hide = () => { if (tip) tip.style.display = 'none'; };
+    document.addEventListener('mousemove', e => { const g = e.target.closest && e.target.closest('[data-tip]'); if (g) show(g, e.clientX, e.clientY); else hide(); });
+    document.addEventListener('focusin', e => { const g = e.target.closest && e.target.closest('[data-tip]'); if (g) { const r = g.getBoundingClientRect(); show(g, r.left + r.width / 2, r.top); } });
+    document.addEventListener('focusout', hide);
+    window.addEventListener('scroll', hide, { passive: true });
+  })();
+  /* ---------- ссылка «поделиться» ---------- */
+  function shareUrl() {
+    const base = L.fromVariant(S.P.variant), diff = {};
+    for (const k of Object.keys(S.P)) if (k !== 'variant' && JSON.stringify(S.P[k]) !== JSON.stringify(base[k])) diff[k] = S.P[k];
+    let h = '#v' + S.P.variant + '-' + S.tab;
+    if (Object.keys(diff).length) h += '&s=' + btoa(unescape(encodeURIComponent(JSON.stringify(diff)))).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
+    return location.href.split('#')[0] + h;
+  }
+  function share() {
+    const url = shareUrl();
+    copyText(url, 'Ссылка скопирована: по ней откроется этот же расчёт');
+  }
   /* ---------- слоты сохранений ---------- */
   const SLOT_KEY = 'ep-slots', SLOT_N = 5;
   function getSlots() { let a = null; try { a = JSON.parse(localStorage.getItem(SLOT_KEY) || 'null'); } catch (e) { a = null; } a = Array.isArray(a) ? a : []; while (a.length < SLOT_N) a.push(null); return a.slice(0, SLOT_N); }
@@ -368,8 +414,7 @@
             <p class="dhint">По умолчанию — значения из примеров методички: γ = 30°, I<sub>d,гр</sub> = 0,2·I<sub>ном</sub>, p<sub>(1)</sub> = 10 %, K<sub>I</sub> = 2,5, K<sub>в</sub> = 0,33, R<sub>д1</sub> = 10 кОм, T<sub>ф</sub> = 0,01 с, N = 10, T<sub>0</sub> = 0,001 с.</p></div></details>
         </section>
         <section class="dsec">
-          <h2>4. Отчёт Word</h2>
-          <p class="dlead">Оформление по ГОСТ 7.32-2017 и ГОСТ 2.105: Times New Roman 14 пт, интервал 1,5, отступ 1,25 см, поля 30/15/20/20 мм, формулы Word без нумерации. Данные титульного листа сохраняются в браузере.</p>
+          <h2>4. Отчёт и файлы</h2>
           <h3>Титульный лист</h3>
           <div class="form-grid fg4">
             ${tfld('student', 'Студент (Ф. И. О.)', 'Иванов И. И.')}${tfld('group', 'Группа', '741-15')}${tfld('teacher', 'Проверил', 'Малев Н. А.')}${tfld('discipline', 'Дисциплина', '')}
@@ -388,16 +433,21 @@
           <h3>Скачать</h3>
           <div class="dl-grid">${[1, 2, 3, 4, 5, 6].map(k => `<button class="btn" data-docx="lr${k}">${dlIcon()} ЛР № ${k}</button>`).join('')}<button class="btn primary dl-all" data-docx="all">${dlIcon()} Единый отчёт по ЛР 1–6</button></div>
           <p class="dhint">Отдельный отчёт — на каждую работу; единый — общий титульный лист, каждая работа с новой страницы.</p>
+          <h3>Архив всех работ</h3>
+          <div class="dact"><button class="btn" id="zip-all">${dlIcon()} Скачать архив ЛР 1–6 (.zip)</button></div>
+          <p class="dhint">Все скрипты MATLAB и программы CoDeSys по работам, отчёты Word (отдельные и единый), полный расчёт в HTML, графики PNG и данные CSV.</p>
         </section>
         <section class="dsec">
           <h2>5. Сохранения</h2>
           <p class="dlead">Текущее состояние запоминается автоматически и восстанавливается при следующем открытии сайта; отдельно ведётся автосохранение — к нему можно вернуться, если загрузили не тот слот. Чтобы держать несколько наборов (например, свой вариант и вариант одногруппника), сохраните их в слоты: в слот попадают все параметры, выбранные элементы, методика расчёта и данные отчёта.</p>
           <div class="opts slots" id="slots">${slotsHtml()}</div>
-          <div class="dact"><button class="btn" id="slots-exp">${dlIcon()} Экспорт в файл</button><label class="btn" for="slots-imp-f">Импорт из файла</label><input type="file" id="slots-imp-f" accept=".json,application/json" hidden></div>
-          <p class="dhint">Слоты хранятся только в этом браузере на этом устройстве. Чтобы перенести их на другое устройство или не потерять при очистке браузера, сохраните файл экспорта.</p>
+          <div class="dact"><button class="btn" id="share2">${LINK_ICON} Скопировать ссылку на расчёт</button><button class="btn" id="slots-exp">${dlIcon()} Экспорт в файл</button><label class="btn" for="slots-imp-f">Импорт из файла</label><input type="file" id="slots-imp-f" accept=".json,application/json" hidden></div>
+          <p class="dhint">Ссылка содержит вариант и все ваши правки (элементы, методику, константы) — по ней одногруппник откроет ровно этот расчёт; данные титульного листа в ссылку не попадают. Та же кнопка есть в шапке сайта. Слоты хранятся только в этом браузере на этом устройстве. Чтобы перенести их на другое устройство или не потерять при очистке браузера, сохраните файл экспорта.</p>
         </section>
       </div></article>`;
     bindSlots();
+    $('#zip-all').onclick = e => zipAll(e.currentTarget);
+    $('#share2').onclick = share;
     $('#f-motor').value = String(P.motor); $('#f-tach').value = String(P.tach); $('#f-vt').value = String(P.vt);
     $('#f-C1').value = String(P.C1); $('#f-C2').value = String(P.C2);
     $$('#main input[data-key], #main select[data-key]').forEach(el => el.addEventListener('change', onField));
@@ -448,7 +498,7 @@
     return '';
   }
   function renderItems(items, tab) {
-    let h = '', fig = 0;
+    let h = '', fig = 0; const seen = {};
     for (const it of items) {
       switch (it.k) {
         case 'h': h += `<h2>${esc(it.t)}</h2>`; break;
@@ -462,24 +512,133 @@
           s += '=' + L.n(it.val, it.sig) + (it.unit ? '\\ \\text{' + it.unit + '}' : '');
           let d = window.EXPLAIN ? EXPLAIN.eqDesc(it.lhs) : '';
           if (it.lhs === 'R_2' && /U_\{вых\}/.test(it.formula)) d = 'Сопротивление R2 стабилизатора LM317/LM337, задающее выходное напряжение ±15 В для питания операционных усилителей.';
-          h += calcCard(s, d); break;
+          const n = seen[it.lhs] = (seen[it.lhs] || 0) + 1, ck = tab + '|' + it.lhs + '|' + n;
+          CHKIDX[ck] = { tab, lhs: it.lhs, n, val: it.val, unit: it.unit || '', order: Object.keys(CHKIDX).length };
+          h += calcCard(s, d, ck); break;
         }
         case 'check': h += `<div class="check ${it.ok ? '' : 'bad'}"><span class="mark">${it.ok ? '✓' : '!'}</span><div class="body">${tex(it.tex, false)}<div class="ct">${it.t || ''}</div></div></div>`; break;
         case 'table': h += `<div class="tbl"><table>${it.caption ? `<caption>${esc(it.caption)}</caption>` : ''}<thead><tr>${it.head.map(c => `<th>${cell(c)}</th>`).join('')}</tr></thead><tbody>${it.rows.map(r => `<tr>${r.map(c => `<td>${cell(c)}</td>`).join('')}</tr>`).join('')}</tbody></table></div>`; break;
         case 'code': h += codeBlock(it.t, it.title, it.lang); break;
         case 'plot': fig++; h += `<figure class="fig"><div class="plot" id="p-${it.id}"><div class="plot-wait"><span><span class="spinner"></span>Моделирование…</span></div></div><figcaption><span><b>Рис. ${tab.slice(2)}.${fig}.</b> ${esc(it.title)}</span></figcaption></figure>` + (it.id === 'lr5_bode_pid' ? approxForm('pid') : it.id === 'lr5_bode_id' ? approxForm('id') : ''); break;
-        case 'diagram': h += `<div class="diagram" id="d-${it.id}"><p class="dcap">${esc(it.title)}</p>${diagramSvg(it.id)}</div>`; break;
+        case 'diagram': h += `<div class="diagram" id="d-${it.id}"><p class="dcap">${esc(it.title)}<span class="dhint-r">наведите на блок — его имя в Simulink</span></p>${diagramSvg(it.id)}</div>`; break;
         case 'simres': h += `<div class="tbl" id="s-${it.id}"><table><caption>${esc(it.title)}</caption><tbody><tr><td><span class="spinner"></span>Идёт моделирование…</td></tr></tbody></table></div>`; break;
       }
     }
     return h;
   }
+  const LINK_ICON = '<svg width="15" height="15" viewBox="0 0 16 16" aria-hidden="true"><path d="M6.6 9.4a2.6 2.6 0 0 0 3.7 0l2.4-2.4a2.6 2.6 0 0 0-3.7-3.7l-.9.9M9.4 6.6a2.6 2.6 0 0 0-3.7 0L3.3 9a2.6 2.6 0 0 0 3.7 3.7l.9-.9" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg>';
   let calcSeq = 0;
   const CALC = {};
   const ICON_COPY = '<svg width="16" height="16" viewBox="0 0 16 16" aria-hidden="true"><rect x="5" y="5" width="9" height="9" rx="1.5" fill="none" stroke="currentColor" stroke-width="1.4"/><path d="M11 5V3.5A1.5 1.5 0 0 0 9.5 2h-6A1.5 1.5 0 0 0 2 3.5v6A1.5 1.5 0 0 0 3.5 11H5" fill="none" stroke="currentColor" stroke-width="1.4"/></svg>';
-  function calcCard(src, desc) {
+  function calcCard(src, desc, ck) {
     const id = 'f' + (++calcSeq); CALC[id] = src;
-    return `<div class="calc"><div class="calc-math">${tex(src, true)}</div><div class="calc-tools"><button class="calc-btn" data-mml="${id}" title="Копировать формулу для Word (MathML)" aria-label="Копировать формулу для Word">${ICON_COPY}</button><button class="calc-btn tx" data-tex="${id}" title="Копировать как LaTeX" aria-label="Копировать как LaTeX">TeX</button></div>${desc ? `<div class="calc-desc">${esc(desc)}</div>` : ''}</div>`;
+    const chk = ck && CHK.on ? chkRow(ck) : '';
+    return `<div class="calc"><div class="calc-math">${tex(src, true)}</div><div class="calc-tools"><button class="calc-btn" data-mml="${id}" title="Копировать формулу для Word (MathML)" aria-label="Копировать формулу для Word">${ICON_COPY}</button><button class="calc-btn tx" data-tex="${id}" title="Копировать как LaTeX" aria-label="Копировать как LaTeX">TeX</button></div>${desc ? `<div class="calc-desc">${esc(desc)}</div>` : ''}${chk}</div>`;
+  }
+  /* ---------- сверка с ручным расчётом ---------- */
+  const CHKIDX = {};
+  const CHK = (() => { let c = null; try { c = JSON.parse(localStorage.getItem('ep-check') || 'null'); } catch (e) { c = null; } return Object.assign({ on: false, vals: {} }, c || {}); })();
+  function saveChk() { try { localStorage.setItem('ep-check', JSON.stringify(CHK)); } catch (e) { /* ignore */ } }
+  const chkKey = ck => S.P.variant + '|' + ck;
+  function chkRow(ck) {
+    const v = CHK.vals[chkKey(ck)];
+    return `<div class="chk-row" data-ck="${esc(ck)}"><label><span>Ваше значение</span><input inputmode="decimal" autocomplete="off" value="${v === undefined ? '' : esc(String(v).replace('.', ','))}" placeholder="из тетради">${CHKIDX[ck] && CHKIDX[ck].unit ? `<em>${esc(CHKIDX[ck].unit)}</em>` : ''}</label><div class="chk-v"></div></div>`;
+  }
+  const relDev = (u, v) => Math.abs(u - v) / Math.max(Math.abs(v), 1e-12);
+  const TOL = 0.006;   // 0,6 % — разница округления
+  const altCache = new Map();
+  function altItemVal(patch, ck) {
+    const key = JSON.stringify(patch);
+    let R = altCache.get(key);
+    if (R === undefined) { try { R = L.compute(Object.assign({}, S.P, patch)); } catch (e) { R = null; } altCache.set(key, R); }
+    if (!R) return undefined;
+    const c = CHKIDX[ck]; let n = 0;
+    for (const it of R['L' + c.tab.slice(2)].items) if (it.k === 'eq' && it.lhs === c.lhs && ++n === c.n) return it.val;
+    return undefined;
+  }
+  function scenarios() {
+    const P = S.P, R = S.R, out = [];
+    out.push({ t: P.deg57 ? 'перевести градусы точно (π/180), а не делением на 57' : 'перевести градусы делением на 57', p: { deg57: P.deg57 ? 0 : 57 } });
+    out.push({ t: P.roundManual ? 'не округлять промежуточные параметры' : 'округлять промежуточные параметры до 0,001', p: { roundManual: !P.roundManual } });
+    out.push({ t: P.roundGear ? 'не округлять передаточное число до целого' : 'округлить передаточное число до целого', p: { roundGear: !P.roundGear } });
+    out.push({ t: 'перевести градусы делением на 57 и не округлять передаточное число', p: { deg57: P.deg57 ? 0 : 57, roundGear: !P.roundGear } });
+    const cur = R.motorId, Ptr = R.lr1.Ptr;
+    D.motors.forEach((mo, k) => {
+      if (k === cur || mo.P * 1000 < Ptr * 0.95 || mo.P > R.lr1.mo.P * 3) return;
+      const nm = `${mo.type} (${fnum(mo.P)} кВт, ${mo.U} В, ${mo.n} об/мин)`;
+      out.push({ t: 'взять двигатель ' + nm, p: { motor: k }, mo: true });
+      out.push({ t: 'взять двигатель ' + nm + ' и перевести градусы ' + (P.deg57 ? 'точно' : 'делением на 57'), p: { motor: k, deg57: P.deg57 ? 0 : 57 }, mo: true });
+    });
+    return out;
+  }
+  let chkRun = 0;
+  async function verdict(ck, row) {
+    const out = $('.chk-v', row), c = CHKIDX[ck];
+    const raw = CHK.vals[chkKey(ck)];
+    row.classList.remove('ok', 'warn', 'bad');
+    if (raw === undefined || raw === '') { out.innerHTML = ''; return; }
+    const u = +raw, v = c.val;
+    if (!isFinite(u)) { out.textContent = 'Введите число'; row.classList.add('warn'); return; }
+    const dv = relDev(u, v), pc = x => String(+(x * 100).toFixed(x < 0.01 ? 2 : 1)).replace('.', ',') + ' %';
+    if (dv <= TOL) { row.classList.add('ok'); out.innerHTML = '✓ Совпадает' + (dv > 0.0005 ? ` (разница ${pc(dv)} — округление)` : ''); return 'ok'; }
+    for (const k of [1e3, 1e-3, 1e6, 1e-6]) if (relDev(u * k, v) <= TOL) { row.classList.add('warn'); out.innerHTML = `≈ Совпадает с точностью до единиц измерения: проверьте приставку (×${k >= 1 ? fnum(k) : '1/' + fnum(1 / k)}) — утилита считает в ${esc(c.unit || 'основных единицах')}.`; return 'warn'; }
+    // обрезание вместо округления (0,008675 → 0,008)
+    for (let k = 1; k <= 4; k++) {
+      const e = Math.pow(10, Math.floor(Math.log10(Math.abs(v))) - k + 1), tr = Math.trunc(v / e) * e, rn = Math.round(v / e) * e;
+      if (Math.abs(u - tr) < e * 1e-6 && Math.abs(tr - rn) > e * 0.5) { row.classList.add('warn'); out.innerHTML = `≈ Похоже, значение обрезано, а не округлено: ${fnum(v)} ≈ ${String(+rn.toPrecision(k)).replace('.', ',')}, а не ${String(+tr.toPrecision(k)).replace('.', ',')}.`; return 'warn'; }
+    }
+    const entered = Object.entries(CHKIDX).filter(([k, x]) => k !== ck && x.tab === c.tab && CHK.vals[chkKey(k)] !== undefined && CHK.vals[chkKey(k)] !== '');
+    const prev = entered.filter(([k, x]) => x.order < c.order && relDev(+CHK.vals[chkKey(k)], x.val) > 0.025);
+    const okOthers = entered.filter(([k, x]) => relDev(+CHK.vals[chkKey(k)], x.val) <= TOL);
+    row.classList.add('bad');
+    out.innerHTML = `✗ Расхождение ${pc(dv)} (утилита: ${fnum(v)}). <span class="spinner"></span> Ищу причину…`;
+    const run = ++chkRun; row.dataset.run = run;
+    for (const sc of scenarios()) {
+      if (row.dataset.run !== String(run)) return;
+      const av = altItemVal(sc.p, ck);
+      await new Promise(r => setTimeout(r, 0));
+      if (av === undefined || relDev(u, av) > TOL) continue;
+      // объяснение должно согласовываться с остальными вашими совпавшими значениями
+      if (okOthers.some(([k]) => { const a = altItemVal(sc.p, k); return a === undefined || relDev(+CHK.vals[chkKey(k)], a) > TOL; })) continue;
+      row.classList.remove('bad'); row.classList.add('warn');
+      out.innerHTML = `≈ Ваше значение получается, если ${esc(sc.t)} (${fnum(av)}). Расчёт сам по себе верный — отличаются исходные допущения.${sc.mo ? ' Выбрать этот двигатель можно на вкладке «Данные».' : ' Переключить можно в разделе «Методика расчёта» на вкладке «Данные».'}`;
+      return 'warn';
+    }
+    if (row.dataset.run !== String(run)) return;
+    if (dv <= 0.025) { row.classList.remove('bad'); row.classList.add('warn'); out.innerHTML = `≈ Близко: расхождение ${pc(dv)} (утилита: ${fnum(v)}). Обычно так бывает, когда промежуточные величины округлены сильнее — например, коэффициент взят с двумя знаками. Ошибкой это не считается.`; return 'warn'; }
+    out.innerHTML = `✗ Расхождение ${pc(dv)} (утилита: ${fnum(v)}). ` + (prev.length
+      ? `Возможно, это следствие расхождения выше: ${prev.map(([, x]) => tex(x.lhs, false)).join(', ')}. Начните сверку с первого несовпадающего значения.`
+      : 'Предыдущие значения совпадают — вероятна арифметическая ошибка в этой формуле. Сверьте подстановку чисел с формулой выше.');
+    return 'bad';
+  }
+  function chkSummary() {
+    const box = $('#chk-sum'); if (!box) return;
+    const rows = $$('.chk-row'), n = rows.filter(r => CHK.vals[chkKey(r.dataset.ck)] !== undefined && CHK.vals[chkKey(r.dataset.ck)] !== '').length;
+    const ok = rows.filter(r => r.classList.contains('ok')).length, w = rows.filter(r => r.classList.contains('warn')).length, b = rows.filter(r => r.classList.contains('bad')).length;
+    box.innerHTML = n ? `Сверено: ${n} из ${rows.length} · <b class="c-ok">✓ ${ok}</b> · <b class="c-warn">≈ ${w}</b> · <b class="c-bad">✗ ${b}</b>` : `Впишите свои значения в поля под формулами — утилита сравнит их и подскажет причину расхождения.`;
+  }
+  function bindChk(root) {
+    const sw = $('#chk-on', root);
+    if (sw) sw.onchange = () => { CHK.on = sw.checked; saveChk(); const y = window.scrollY; renderTab(); window.scrollTo(0, y); };
+    const clr = $('#chk-clr', root);
+    if (clr) clr.onclick = () => { const pre = S.P.variant + '|' + S.tab + '|'; Object.keys(CHK.vals).forEach(k => { if (k.startsWith(pre)) delete CHK.vals[k]; }); saveChk(); const y = window.scrollY; renderTab(); window.scrollTo(0, y); };
+    if (!CHK.on) return;
+    altCache.clear();
+    const rows = $$('.chk-row', root);
+    const upd = async row => { await verdict(row.dataset.ck, row); chkSummary(); };
+    rows.forEach(row => {
+      const inp = $('input', row);
+      inp.addEventListener('change', () => {
+        const t = inp.value.trim().replace(/\s/g, '').replace(',', '.');
+        const k = chkKey(row.dataset.ck);
+        if (t === '') delete CHK.vals[k]; else CHK.vals[k] = t;
+        saveChk(); upd(row);
+        // зависимые значения ниже пересматриваются
+        rows.filter(r => CHKIDX[r.dataset.ck].order > CHKIDX[row.dataset.ck].order && CHK.vals[chkKey(r.dataset.ck)] !== undefined).forEach(upd);
+      });
+    });
+    (async () => { for (const r of rows) if (CHK.vals[chkKey(r.dataset.ck)] !== undefined) await verdict(r.dataset.ck, r); chkSummary(); })();
+    chkSummary();
   }
   function mathml(src) {
     let h = katex.renderToString(texify(src), { displayMode: true, output: 'mathml', throwOnError: false, strict: 'ignore' });
@@ -535,12 +694,14 @@
     const rep = R['L' + no];
     main.innerHTML = `<article class="sheet">
       <header class="sheet-head"><div><div class="eyebrow">Лабораторная работа № ${no}</div><h1>${esc(TITLES[tab])}</h1><p class="lead">${leadText(tab)}</p></div>${stamp(no)}</header>
-      <div class="sheet-body rep"><div class="kpis">${kpis(tab)}</div><p class="calc-hint">${ICON_COPY} у каждой формулы копирует её в формате MathML — в Word вставляется как редактируемое уравнение (Ctrl+V). Если вставилось текстом, используйте «Специальная вставка → Только текст». Кнопка «TeX» копирует LaTeX.</p>${renderItems(rep.items, tab)}${filesPanel(tab)}
+      <div class="sheet-body rep"><div class="kpis">${kpis(tab)}</div><p class="calc-hint">${ICON_COPY} у каждой формулы копирует её в формате MathML — в Word вставляется как редактируемое уравнение (Ctrl+V). Если вставилось текстом, используйте «Специальная вставка → Только текст». Кнопка «TeX» копирует LaTeX.</p>
+        <div class="opts chk-bar"><div class="opt"><div class="opt-t"><b>Сверка с ручным расчётом</b><span id="chk-sum">${CHK.on ? '' : 'Под каждой формулой появится поле для вашего значения: утилита сравнит его и подскажет причину расхождения — округление, перевод градусов, другой двигатель или ошибка в подстановке.'}</span></div><div class="opt-c" style="display:flex;gap:10px;align-items:center">${CHK.on ? '<button class="btn" id="chk-clr">Очистить</button>' : ''}<label class="sw"><input type="checkbox" id="chk-on" ${CHK.on ? 'checked' : ''}><span class="track" aria-hidden="true"></span><span class="sr">Сверка</span></label></div></div></div>${renderItems(rep.items, tab)}${simHints(tab)}${filesPanel(tab)}
         <div style="display:flex;justify-content:space-between;gap:8px;margin-top:22px;flex-wrap:wrap">${+no > 1 ? `<button class="btn" data-go="lr${+no - 1}">← ЛР № ${+no - 1}</button>` : '<span></span>'}${+no < 6 ? `<button class="btn" data-go="lr${+no + 1}">ЛР № ${+no + 1} →</button>` : ''}</div>
       </div></article>`;
     $$('[data-go]').forEach(b => b.onclick = () => go(b.dataset.go));
     bindFiles(main);
     bindCalc(main);
+    bindChk(main);
     bindApprox();
     drawStatic(tab);
     runSims(tab);
@@ -752,14 +913,91 @@
     }
     return [];
   }
+  /* ---------- подсказка: что вписать в блоки Simulink ---------- */
+  // вычисление простых выражений MATLAB (числа, матрицы, + - * / ^, pi) по переменным скрипта
+  function mToJs(e) {
+    e = e.trim().replace(/\bpi\b/g, 'Math.PI').replace(/\^/g, '**');
+    let out = '', i = 0;
+    const mat = () => {   // e[i] === '['
+      i++; const rows = [[]]; let cur = '', dep = 0;
+      const push = () => { if (cur.trim()) rows[rows.length - 1].push(mToJs(cur)); cur = ''; };
+      for (; i < e.length; i++) {
+        const ch = e[i];
+        if (ch === '[' && dep === 0) { cur += mat(); continue; }
+        if (ch === '(') dep++; else if (ch === ')') dep--;
+        if (dep === 0 && ch === ']') { push(); break; }
+        if (dep === 0 && ch === ';') { push(); rows.push([]); continue; }
+        if (dep === 0 && (ch === ',' || /\s/.test(ch))) {
+          // пробел перед унарным минусом/плюсом — разделитель, иначе (a - b) — оператор
+          if (/\s/.test(ch)) { const rest = e.slice(i).replace(/^\s+/, ''); const prev = cur.trim(); if (/^[+\-]\s/.test(rest) || /[+\-*\/^]$/.test(prev) || !prev) continue; }
+          push(); continue;
+        }
+        cur += ch;
+      }
+      const rr = rows.filter(r => r.length);
+      return rr.length === 1 ? '[' + rr[0].join(',') + ']' : '[' + rr.map(r => '[' + r.join(',') + ']').join(',') + ']';
+    };
+    for (; i < e.length; i++) { if (e[i] === '[') { out += mat(); } else out += e[i]; }
+    return out;
+  }
+  function mEval(expr, env) {
+    const js = mToJs(expr);
+    if (/[^\w\s.+\-*\/(),\[\]]/.test(js.replace(/Math\.PI/g, ''))) return undefined;
+    const ids = (js.match(/[A-Za-z_]\w*/g) || []).filter(x => x !== 'Math' && x !== 'PI');
+    if (ids.some(x => !(x in env))) return undefined;
+    try { return Function(...Object.keys(env), '"use strict";return (' + js + ')')(...Object.values(env)); } catch (e) { return undefined; }
+  }
+  function scriptEnv(code) {
+    const env = {};
+    code.split('\n').forEach(line => {
+      line = line.replace(/%.*$/, '');
+      const sts = []; let cur = '', d = 0; for (const ch of line) { if (ch === '[' || ch === '(') d++; else if (ch === ']' || ch === ')') d--; if (ch === ';' && d === 0) { sts.push(cur); cur = ''; } else cur += ch; } sts.push(cur);
+      sts.forEach(st => { const m = st.match(/^\s*([A-Za-z_]\w*)\s*=\s*(.+?)\s*$/); if (!m || /==/.test(st)) return; const v = mEval(m[2], env); if (v !== undefined) env[m[1]] = v; });
+    });
+    return env;
+  }
+  const mNum = x => { if (typeof x !== 'number') return String(x); const s = String(+x.toPrecision(6)); return s.includes('e') ? x.toExponential(4).replace(/\.?0+e/, 'e') : s; };
+  const mVal = v => Array.isArray(v) ? (Array.isArray(v[0]) ? '[' + v.map(r => r.map(mNum).join(' ')).join('; ') + ']' : '[' + v.map(mNum).join(' ') + ']') : mNum(v);
+  const PNAME = { Numerator: 'Числитель', Denominator: 'Знаменатель', Gain: 'Усиление (Gain)', After: 'Конечное значение', Time: 'Время шага', Inputs: 'Знаки входов', A: 'A', B: 'B', C: 'C', D: 'D', SampleTime: 'Шаг дискретизации' };
+  const BTYPE = { tf: 'Transfer Fcn', gain: 'Gain', sum: 'Sum', step: 'Step', dss: 'Discrete State-Space', zoh: 'Zero-Order Hold', prod: 'Product', clock: 'Clock' };
+  let SIMHINT = {};
+  function simHints(tab) {
+    let ms = []; try { ms = G.models(S.R).filter(x => x.tab === tab); } catch (e) { console.error(e); return ''; }
+    if (!ms.length) return '';
+    SIMHINT = {};
+    const blocks = ms.map((x, mi) => {
+      const env = scriptEnv(x.code);
+      const rows = [];
+      for (const b of x.md.b) {
+        const type = Object.keys(BTYPE).find(k => b.lib.endsWith('/' + BTYPE[k])) ; if (!type) continue;
+        const ps = Object.entries(b.params).filter(([k]) => PNAME[k]);
+        if (!ps.length) continue;
+        ps.forEach(([k, v], pi) => {
+          let val;
+          const q = String(v).match(/^'(.*)'$/);
+          if (q) val = q[1];
+          else { const inner = String(v).replace(/^(num2str|mat2str)\((.*?)(,\s*\d+)?\)$/, '$2'); const r = mEval(inner, env); val = r === undefined ? v : mVal(r); }
+          const id = 'sh' + mi + '_' + rows.length; SIMHINT[id] = val;
+          rows.push(`<tr>${pi === 0 ? `<td rowspan="${ps.length}"><b>${esc(b.nm)}</b>${b.nm.replace(/\d+$/, '') !== BTYPE[type] ? `<span>${BTYPE[type]}</span>` : ''}</td>` : ''}<td>${PNAME[k]}</td><td><div class="sv"><code>${esc(val)}</code><button class="calc-btn" data-sh="${id}" title="Копировать" aria-label="Копировать значение">${ICON_COPY}</button></div></td></tr>`);
+        });
+      }
+      return `<details class="adv sh"><summary>${esc(x.file)}.slx${ms.length > 1 ? ' — ' + (x.file.endsWith('_pid') ? 'ν = 2, ПИД-регулятор положения' : 'ν = 1, интегро-дифференцирующий регулятор') : ''}</summary><div class="in"><div class="tbl sh-tbl"><table><thead><tr><th>Блок</th><th>Параметр</th><th>Значение</th></tr></thead><tbody>${rows.join('')}</tbody></table></div></div></details>`;
+    }).join('');
+    const P = S.P, f = fnum;
+    const note = { lr2: `Step задаёт U<sub>з</sub> = ${f(P.Uz)} В при t = 0, Step1 — наброс момента M<sub>c0</sub> = ${f(P.Mc)} Н·м при t = 1 с.`,
+      lr3: `Значения Step/Step1 даны для переходной характеристики по заданию. Для характеристики по моменту сопротивления: Step → 0, Step1 → −M<sub>c0</sub> = −${f(P.Mc)}.`,
+      lr4: `Значения Step/Step1 даны для переходной характеристики по заданию. Для характеристики по моменту сопротивления: Step → 0, Step1 → −M<sub>c0</sub> = −${f(P.Mc)}.` }[tab];
+    return `<h2>Блоки модели Simulink</h2><p>Если собираете модель вручную, впишите в блоки эти значения (копируются кнопкой). Имена блоков — как в скрипте <code>*_model.m</code>, который строит ту же модель автоматически.</p>${note ? `<div class="note">${note}</div>` : ''}${blocks}`;
+  }
   function filesPanel(tab) {
     const files = labFiles(tab);
-    return `<section class="files" aria-label="Файлы для MATLAB"><div class="files-head"><div><h3>Файлы для MATLAB R2022</h3><p>Запускайте по порядку; каждый файл самодостаточен — параметры варианта записаны внутри.</p></div><span style="display:flex;gap:8px;flex-wrap:wrap"><button class="btn" data-docx="${tab}">${dlIcon()} Отчёт Word</button><button class="btn primary" data-zip="${tab}">${dlIcon()} ZIP этой работы</button></span></div>
+    return `<section class="files" aria-label="Файлы для MATLAB"><div class="files-head"><div><h3>Файлы для MATLAB</h3><p>Запускайте по порядку; каждый файл самодостаточен — параметры варианта записаны внутри.</p></div><span style="display:flex;gap:8px;flex-wrap:wrap"><button class="btn" data-docx="${tab}">${dlIcon()} Отчёт Word</button><button class="btn primary" data-zip="${tab}">${dlIcon()} ZIP этой работы</button></span></div>
       ${files.map((f, k) => `<div class="file-row" data-file="${k}"><div><div class="fn"><span class="step-no">${k + 1}</span>${esc(f.path.split('/')[1])}</div><div class="fd">${esc(f.desc)}</div></div><div class="acts"><button class="btn sm" data-fview="${k}">Показать</button><button class="btn sm" data-fcopy="${k}">Копировать</button><button class="btn sm" data-fdl="${k}">Скачать</button></div><div class="file-view" hidden></div></div>`).join('')}</section>`;
   }
   function bindFiles(root) {
     const files = labFiles(S.tab);
     $$('[data-copy]', root).forEach(b => b.onclick = () => copyText(CODE[b.dataset.copy].src));
+    $$('[data-sh]', root).forEach(b => b.onclick = () => copyText(SIMHINT[b.dataset.sh], 'Значение скопировано'));
     $$('[data-dl]', root).forEach(b => b.onclick = () => downloadText(CODE[b.dataset.dl].name, CODE[b.dataset.dl].src));
     $$('[data-fcopy]', root).forEach(b => b.onclick = () => copyText(files[+b.dataset.fcopy].gen()));
     $$('[data-fdl]', root).forEach(b => b.onclick = () => { const f = files[+b.dataset.fdl]; downloadText(f.path.split('/')[1], f.gen()); });
@@ -1121,13 +1359,14 @@ ${parts.join('\n')}</body></html>`;
     $('#var-sel').onchange = e => setVariant(+e.target.value);
     $('#var-prev').onclick = () => setVariant(S.P.variant - 1);
     $('#var-next').onclick = () => setVariant(S.P.variant + 1);
-    $('#zip-all').onclick = e => zipAll(e.currentTarget);
+    $('#share').onclick = share;
     $('#theme').onclick = themeToggle;
     const setTopH = () => document.documentElement.style.setProperty('--top-h', $('.top').offsetHeight + 'px');
     window.addEventListener('resize', setTopH); setTopH();
     load(); loadT();
     const au = getAuto();
-    if (au && au.P) {
+    if (S.shared) { S.skipAuto = true; recompute(); toast('Открыт расчёт по ссылке'); }
+    else if (au && au.P) {
       // начинаем с чистого состояния и предлагаем вернуться к автосохранению
       S.P = L.fromVariant(1); S.T = Object.assign({}, T_DEF); S.tab = 'data';
       S.skipAuto = true; recompute();

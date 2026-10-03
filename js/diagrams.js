@@ -39,6 +39,8 @@
   Diagram.prototype.text = function (x, y, t, anchor, cls) { this.els.push({ kind: 'text', x, y, t, anchor: anchor || 'middle', cls: cls || '' }); this.fit(x + 40, y + 10); };
   Diagram.prototype.wire = function (pts, arrow) { this.els.push({ kind: 'wire', pts, arrow: arrow !== false }); pts.forEach(p => this.fit(p[0] + 10, p[1] + 10)); };
   Diagram.prototype.dot = function (x, y) { this.els.push({ kind: 'dot', x, y }); };
+  // подписи для всплывающей подсказки: имя блока в модели Simulink
+  Diagram.prototype.tag = function (map) { for (const [id, t] of Object.entries(map)) if (this.nodes[id]) this.nodes[id].sl = t; return this; };
   Diagram.prototype.fit = function (x, y) { this.W = Math.max(this.W, x); this.H = Math.max(this.H, y); };
   Diagram.prototype.port = function (id, side) {
     const n = this.nodes[id];
@@ -70,6 +72,8 @@
       if (e.kind === 'wire') s += `<polyline class="wire" points="${e.pts.map(p => p.join(',')).join(' ')}" ${e.arrow ? 'marker-end="url(#arr)"' : ''}/>`;
     }
     for (const e of this.els) {
+      const tip = e.sl ? `<g class="hv" tabindex="0" data-tip="${esc(e.sl)}"><title>${esc(e.sl.replace('|', ' — '))}</title>` : '';
+      if (tip) s += tip;
       if (e.kind === 'block') {
         const x = e.x - e.w / 2, y = e.y - e.h / 2;
         s += `<rect class="blk${e.opt.accent ? ' acc' : ''}${e.opt.dashed ? ' dsh' : ''}" x="${x}" y="${y}" width="${e.w}" height="${e.h}" rx="2"/>`;
@@ -89,6 +93,7 @@
         for (const [side, sg] of Object.entries(e.signs)) { const o = off[side]; s += `<text class="sg" x="${e.x + o[0]}" y="${e.y + o[1]}">${sg === '-' ? '−' : '+'}</text>`; }
       } else if (e.kind === 'text') s += `<text class="lbl ${e.cls}" x="${e.x}" y="${e.y}" text-anchor="${e.anchor}">${esc(e.t)}</text>`;
       else if (e.kind === 'dot') s += `<circle class="dot" cx="${e.x}" cy="${e.y}" r="2.6"/>`;
+      if (tip) s += '</g>';
     }
     return s + '</svg>';
   };
@@ -124,7 +129,7 @@
     d.wire([[xt, y], [xt, 248], d.port('os', 'r')]);
     d.wire([d.port('os', 'l'), [d.nodes.s1.x, 248], d.port('s1', 'b')]);
     d.text(d.nodes.s1.x + 6, 240, 'Uос(s)', 'start', 'sig');
-    return d;
+    return d.tag({ s1: 'Sum|Sum, знаки «+−» — сигнал рассогласования ΔU', tp: 'Transfer Fcn|Transfer Fcn — тиристорный преобразователь', s2: 'Sum1|Sum, «+−» — вычитание противо-ЭДС', ia: 'Transfer Fcn2|Transfer Fcn — якорная цепь 1/R/(Tэs+1)', s3: 'Sum2|Sum, «+−» — вычитание момента нагрузки', wm: 'Transfer Fcn1|Transfer Fcn — механическая часть R/(cTм s)', c: 'Gain|Gain — коэффициент противо-ЭДС c', mc: 'Gain1|Gain — 1/(icη), вход от Step1 (наброс Mc)', os: 'Transfer Fcn3|Transfer Fcn — тахогенератор с фильтром' });
   }
   function speedChain(R, digital, uLabel) {
     const o = R.lr1, l3 = R.lr3, d = new Diagram(), y = 110;
@@ -158,7 +163,9 @@
     d.wire([[xt, y], [xt, 262], d.port('os', 'r')]);
     d.wire([d.port('os', 'l'), [d.nodes.s1.x, 262], d.port('s1', 'b')]);
     d.text(d.nodes.s1.x + 6, 254, 'uос', 'start', 'sig');
-    return d;
+    return d.tag({ s1: 'Sum_e|Sum, «+−» — рассогласование ΔuΩ',
+      rc: digital ? 'Discrete State-Space|Discrete State-Space — цифровой регулятор (матрицы A, B, C, D из tf2ss)' : (o.caseA ? 'Gain + Transfer Fcn1 + Sum_pi + Transfer Fcn|ПИД-регулятор: Gain (Kрс), Transfer Fcn1 (Kрс/(Tрс1 s)), сумматор Sum_pi и Transfer Fcn ((Tрс2 s+1)/(Tрс3 s+1))' : 'W_rc|Transfer Fcn — регулятор скорости целиком'),
+      zoh: 'Zero-Order Hold|Zero-Order Hold — экстраполятор нулевого порядка (ЦАП)', tp: 'Transfer Fcn2|Transfer Fcn — тиристорный преобразователь', kdv: 'Gain1|Gain — Kдв = 1/c', s2: 'Sum_m|Sum, «+−» — вычитание моментной составляющей', dv: 'Transfer Fcn3|Transfer Fcn — двигатель 1/(TэTм s²+Tм s+1)', mf: 'Transfer Fcn5|Transfer Fcn — форсирующее звено канала момента', kmc: 'Gain2|Gain — канал момента R/(ic²η), вход от Step1', os: 'Transfer Fcn4|Transfer Fcn — тахогенератор с фильтром' });
   }
   function pos(R, kind, digital) {
     const o = R.lr1, d = new Diagram(), y = 90;
@@ -188,7 +195,10 @@
     const yb = d.nodes.ks.y + d.nodes.ks.h / 2;
     d.wire([[mx, 165], [mx, yb]]);
     d.text(mx + 6, 160, kind === 'pid' ? 'Mc = M̈c⁰t²/2' : 'Mc = Ṁc⁰t', 'start', 'sig');
-    return d;
+    return d.tag({ s1: 'Sum_a|Sum, «+−» — ошибка Δα', kdp: 'Gain4|Gain — Kдп, датчик положения (ВТ)',
+      rp: digital ? 'Discrete State-Space1|Discrete State-Space — цифровой регулятор положения' : (kind === 'pid' ? 'Gain3 + Transfer Fcn7 + Sum_rp|ПИ-часть: Gain3 (Kрп), Transfer Fcn7 (Kрп/T1 / s), сумматор Sum_rp' : 'Gain3 + Transfer Fcn7|Gain3 (Kрп) и Transfer Fcn7 ((T2 s+1)/(T1 s+1))'),
+      rp2: 'Transfer Fcn6|Transfer Fcn — ' + (kind === 'pid' ? '(T2 s+1)/(T3 s+1)' : '(T3 s+1)/(T4 s+1)'), zoh: 'Zero-Order Hold1|Zero-Order Hold — ЦАП регулятора положения',
+      ks: 'Sum_e … Transfer Fcn4|Подсистема контура скорости — те же блоки, что в модели ' + (digital ? 'ЛР4' : 'ЛР3'), red: 'Transfer Fcn8|Transfer Fcn — редуктор 1/(i s)' });
   }
 
   const api = { lr2, speedChain, pos, poly, num };

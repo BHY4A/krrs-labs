@@ -199,7 +199,8 @@ fprintf('Ωуст (без нагрузки) = %.4g рад/с, после наб�
   }
 
   /* ---------- построитель моделей Simulink ---------- */
-  function Model(name) { this.name = name; this.b = []; this.l = []; }
+  const MODELREG = [];
+  function Model(name) { this.name = name; this.b = []; this.l = []; MODELREG.push(this); }
   Model.prototype.add = function (nm, lib, col, row, params, opt) {
     opt = opt || {};
     const w = opt.w || 70, h = opt.h || 36;
@@ -604,9 +605,9 @@ figure('Name', 'ЛР5: ошибка ν=1'); plot(t, e1); xlabel('t, c'); ylabel(
       `Krp = ${m(a.K)}; T1 = ${m(a.T1)}; T2 = ${m(a.T2)}; T3 = ${m(a.T3)}; T4 = ${m(a.T4)};   % интегро-дифференцирующий регулятор`;
     return header(`ЛР №5. Модель Simulink следящего ЭП, ν = ${nu} (рис. ${kind === 'pid' ? '5.5' : '5.10'})`, R) + params(R) + regParams(R) + `
 ${regp}
-` + md.code() + simRun(null, 4) + runsPos(kind, inGain, mcGain, 'ЛР5');
+` + md.code() + simRun(null, 4) + runsPos(kind, inGain, mcGain, 'ЛР5', R.P);
   }
-  function runsPos(kind, inGain, mcGain, tag) {
+  function runsPos(kind, inGain, mcGain, tag, P) {
     const nu = kind === 'pid' ? 2 : 1;
     return `
 ${plotStyle}% 1) ступенчатое задание αз = 1 рад
@@ -689,7 +690,7 @@ A_rp = ${mmat(ss.A)};
 B_rp = ${mmat(ss.B)};
 C_rp = ${mmat(ss.C)};
 D_rp = ${mmat(ss.D)};
-` + md.code() + simRun(null, 4) + runsPos(kind, inGain, mcGain, 'ЛР6');
+` + md.code() + simRun(null, 4) + runsPos(kind, inGain, mcGain, 'ЛР6', R.P);
   }
 
   /* ---------------- README ---------------- */
@@ -741,6 +742,15 @@ ${P.deg57 ? ' * Угловые величины переводятся в рад
 `;
   }
 
-  const api = { lr1, lr2, lr2model, lr3, lr3model, lr4, lr4model, lr5, lr5model, lr6, lr6model, readme };
+  /* модели как данные (для подсказки «что вписать в блоки») */
+  function models(R) {
+    const out = [];
+    const gen = [['lr2', 'lr2_model', () => lr2model(R)], ['lr3', 'lr3_model', () => lr3model(R)], ['lr4', 'lr4_model', () => lr4model(R)],
+      ['lr5', 'lr5_model_pid', () => lr5model(R, 'pid')], ['lr5', 'lr5_model_id', () => lr5model(R, 'id')],
+      ['lr6', 'lr6_model_pid', () => lr6model(R, 'pid')], ['lr6', 'lr6_model_id', () => lr6model(R, 'id')]];
+    for (const [tab, file, f] of gen) { MODELREG.length = 0; const code = f(); const md = MODELREG[MODELREG.length - 1]; if (md) out.push({ tab, file, md, code }); }
+    return out;
+  }
+  const api = { models, lr1, lr2, lr2model, lr3, lr3model, lr4, lr4model, lr5, lr5model, lr6, lr6model, readme };
   if (typeof module !== 'undefined' && module.exports) module.exports = api; else root.MATGEN = api;
 })(typeof window !== 'undefined' ? window : globalThis);
