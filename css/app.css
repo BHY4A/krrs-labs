@@ -398,3 +398,24 @@ label.btn { cursor: pointer; }
 .modal-card { display: flex; flex-direction: column; gap: 2px; padding: 10px 12px; border: 1px dashed var(--line-strong); border-radius: var(--r); background: var(--calc-bg); margin: 4px 0 10px; }
 .modal-card span { font-size: 13px; color: var(--muted); }
 .modal-act { display: flex; justify-content: flex-end; gap: 8px; margin-top: 14px; flex-wrap: wrap; }
+
+/* навигация по разделам */
+nav.rail { max-height: calc(100vh - 90px); overflow-y: auto; scrollbar-width: thin; }
+.rail-toc { display: flex; flex-direction: column; margin: 2px 0 8px 22px; padding-left: 10px; border-left: 2px solid var(--line); }
+.rail-toc a { display: grid; grid-template-columns: 30px 1fr; gap: 4px; padding: 4px 8px; border: 0; border-radius: 4px; font-size: 12.5px; line-height: 1.3; color: var(--muted); }
+.rail-toc a .tn { font: 500 11.5px/1.35 var(--f-mono); color: var(--muted); }
+.rail-toc a:hover { color: var(--fg); background: var(--sheet); }
+.rail-toc a.on { color: var(--accent); background: var(--accent-soft); font-weight: 600; }
+.rail-toc a.on .tn { color: var(--accent); }
+.toc-fab, .toc-pop { display: none; }
+@media (max-width: 960px) {
+  nav.rail { max-height: none; overflow-y: visible; }
+  .rail-toc { display: none; }
+  .toc-fab { display: inline-flex; align-items: center; gap: 7px; position: fixed; right: 14px; bottom: calc(14px + env(safe-area-inset-bottom, 0px)); z-index: 40; padding: 10px 14px; border: 0; border-radius: 22px; background: var(--accent); color: var(--accent-ink); font: 600 14px/1 var(--f-body); box-shadow: 0 6px 18px rgba(0,0,0,.25); cursor: pointer; }
+  .toc-pop:not([hidden]) { display: flex; flex-direction: column; position: fixed; right: 14px; left: 14px; bottom: calc(64px + env(safe-area-inset-bottom, 0px)); z-index: 41; max-height: 60vh; overflow-y: auto; background: var(--sheet); border: 1px solid var(--line); border-radius: 10px; box-shadow: 0 14px 40px rgba(0,0,0,.25); padding: 6px; }
+  .toc-pop-h { display: flex; justify-content: space-between; align-items: center; padding: 6px 8px 8px; font: 700 15px/1 var(--f-disp); border-bottom: 1px solid var(--line); margin-bottom: 4px; }
+  .toc-top { border: 1px solid var(--line-strong); background: var(--sheet); border-radius: 5px; padding: 4px 8px; font: 500 12.5px var(--f-body); color: var(--fg); cursor: pointer; }
+  .toc-pop a { display: grid; grid-template-columns: 34px 1fr; gap: 4px; padding: 8px; border-radius: 6px; text-decoration: none; color: var(--fg); font-size: 14px; }
+  .toc-pop a .tn { font: 500 12.5px/1.4 var(--f-mono); color: var(--muted); }
+  .toc-pop a.on { background: var(--accent-soft); color: var(--accent); font-weight: 600; }
+}

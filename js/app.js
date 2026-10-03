@@ -106,7 +106,56 @@
     if (S.tab === 'data') renderData(main);
     else renderLab(main, S.tab);
     $$('nav.rail a').forEach(a => a.setAttribute('aria-current', a.dataset.tab === S.tab ? 'page' : 'false'));
+    buildToc();
   }
+
+  /* ---------- навигация по разделам текущей вкладки ---------- */
+  function tocItems() {
+    const out = [];
+    $$('#main .sheet-body h2, #main .files').forEach((el, k) => {
+      if (!el.id) el.id = 'sec-' + S.tab + '-' + k;
+      const t = el.classList.contains('files') ? 'Файлы для MATLAB' : el.textContent.trim().replace(/\s+/g, ' ');
+      const m = t.match(/^(\d+(?:\.\d+)?)\.?\s+(.*)$/);
+      out.push({ id: el.id, no: m ? m[1] : '', t: m ? m[2] : t, el });
+    });
+    return out;
+  }
+  let tocList = [];
+  function buildToc() {
+    $$('.rail-toc').forEach(x => x.remove());
+    tocList = tocItems();
+    const fab = $('#toc-fab'); if (fab) fab.remove();
+    const pop = $('#toc-pop'); if (pop) pop.remove();
+    if (!tocList.length) return;
+    const links = tocList.map(it => `<a href="#${it.id}" data-toc="${it.id}"><span class="tn">${it.no || '↓'}</span><span>${esc(it.t)}</span></a>`).join('');
+    const cur = $(`nav.rail a[data-tab="${S.tab}"]`);
+    if (cur) cur.insertAdjacentHTML('afterend', `<div class="rail-toc" aria-label="Разделы">${links}</div>`);
+    // мобильная кнопка «Разделы»
+    document.body.insertAdjacentHTML('beforeend', `<button class="toc-fab" id="toc-fab" aria-expanded="false" aria-controls="toc-pop"><svg width="16" height="16" viewBox="0 0 16 16" aria-hidden="true"><path d="M2 4h12M2 8h12M2 12h8" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/></svg>Разделы</button><div class="toc-pop" id="toc-pop" hidden><div class="toc-pop-h">Разделы<button class="toc-top" data-top>↑ В начало</button></div>${links}</div>`);
+    const f = $('#toc-fab'), p = $('#toc-pop');
+    f.onclick = () => { const open = p.hidden; p.hidden = !open; f.setAttribute('aria-expanded', String(open)); };
+    $('[data-top]', p).onclick = () => { window.scrollTo({ top: 0, behavior: 'smooth' }); p.hidden = true; f.setAttribute('aria-expanded', 'false'); };
+    $$('[data-toc]').forEach(a => a.onclick = e => {
+      e.preventDefault();
+      const el = document.getElementById(a.dataset.toc); if (!el) return;
+      const off = (parseFloat(getComputedStyle(document.documentElement).getPropertyValue('--top-h')) || 64) + (window.innerWidth <= 960 ? 60 : 16);
+      window.scrollTo({ top: el.getBoundingClientRect().top + window.scrollY - off, behavior: 'smooth' });
+      p.hidden = true; f.setAttribute('aria-expanded', 'false');
+    });
+    spy();
+  }
+  function spy() {
+    if (!tocList.length) return;
+    const lim = window.innerWidth <= 960 ? 150 : 110;
+    let act = tocList[0].id;
+    for (const it of tocList) { if (it.el.getBoundingClientRect().top - lim <= 0) act = it.id; else break; }
+    $$('[data-toc]').forEach(a => a.classList.toggle('on', a.dataset.toc === act));
+    const on = $('.rail-toc a.on'), box = $('nav.rail');
+    if (on && box && box.scrollHeight > box.clientHeight) { const r = on.getBoundingClientRect(), b = box.getBoundingClientRect(); if (r.top < b.top || r.bottom > b.bottom) on.scrollIntoView({ block: 'nearest' }); }
+  }
+  let spyRaf = 0;
+  window.addEventListener('scroll', () => { if (!spyRaf) spyRaf = requestAnimationFrame(() => { spyRaf = 0; spy(); }); }, { passive: true });
+  document.addEventListener('click', e => { const p = $('#toc-pop'); if (p && !p.hidden && !e.target.closest('#toc-pop, #toc-fab')) { p.hidden = true; const f = $('#toc-fab'); if (f) f.setAttribute('aria-expanded', 'false'); } });
 
   /* ---------- вкладка «Исходные данные» ---------- */
   const FIELDS = [
