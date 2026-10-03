@@ -134,7 +134,7 @@
     const box = (lbl, body, on) => `<div class="ex${on ? ' on' : ''}"><div class="ex-h">${lbl}${on ? '<span>сейчас</span>' : ''}</div><div class="ex-b">${body}</div></div>`;
     if (d.table) return `<div class="ex on ex-wide"><div class="ex-b">${d.table}</div></div>`;
     if (d.items) return `<div class="ex-multi" style="--n:${d.items.length}">${d.items.map(it => box(it.l, it.body, it.on)).join('')}</div>`;
-    return box(d.la, d.a, !d.b_on) + box(d.lb, d.b, d.b_on);
+    return box(d.la, d.a, !d.b_on) + box(d.lb, d.b, d.b_on) + (d.note ? `<p class="ex-note">${d.note}</p>` : '');
   }
   function altR(patch) { try { return L.compute(Object.assign({}, S.P, patch)); } catch (e) { return S.R; } }
   const F = (t) => `<div class="ex-f">${t}</div>`;
@@ -161,10 +161,14 @@
     roundGear() {
       const on = !!S.P.roundGear, Ra = on ? altR({ roundGear: false }) : S.R, Rb = on ? S.R : altR({ roundGear: true });
       const g = x => String(+x.toPrecision(6)).replace('.', ',');
-      const body = r => { const me = r.lr1.me; return F(`i<sub>о</sub> = ${g(me.i0)}`) + (me.speedOk ? '' : F(`i<sub>1</sub> = ${g(me.i)}`)) + F(`принято i = ${g(r.lr1.i)}`) + TX(`Дальше: T<sub>м</sub> = ${g(r.lr1.Tm)} с, M<sub>вр</sub> = ${g(me.Mvr)} Н·м`); };
-      const same = Math.abs(Ra.lr1.i - Rb.lr1.i) < 1e-9;
-      const tail = same ? TX('В этом варианте принятое i и так получается целым — разница только в i<sub>о</sub>.') : '';
-      return { la: 'Как рассчитано', a: body(Ra) + tail, lb: 'До целого', b: body(Rb) + tail, b_on: on };
+      const ma = Ra.lr1.me, mb = Rb.lr1.me;
+      const mark = (x, y) => Math.abs(x - y) > 1e-9 * Math.max(1, Math.abs(x)) ? `<mark>${g(x)}</mark>` : g(x);
+      const body = (r, o) => { const me = r.lr1.me, mo = o.lr1.me; return F(`i<sub>о</sub> = ${mark(me.i0, mo.i0)}`) + (me.speedOk ? '' : F(`i<sub>1</sub> = ${mark(me.i, mo.i)}`)) + TX(`Дальше: T<sub>м</sub> = ${mark(r.lr1.Tm, o.lr1.Tm)} с, M<sub>вр</sub> = ${mark(me.Mvr, mo.Mvr)} Н·м`); };
+      const iA = Ra.lr1.i, iB = Rb.lr1.i;
+      const note = Math.abs(iA - iB) < 1e-6
+        ? `В этом варианте принятое передаточное число i = ${g(iB)} ${ma.speedOk ? '' : '(i<sub>1</sub> = Ω<sub>ном</sub>/Ω<sub>max</sub>) '}и так целое, поэтому дальше расчёт не меняется — округляется только i<sub>о</sub>: ${g(ma.i0)} → ${g(mb.i0)}. Заметная разница появляется, когда i получается дробным (например, при переводе градусов делением на 57: i = 95,5 → 96).`
+        : `Принятое i меняется: ${g(iA)} → ${g(iB)} (${(iB / iA - 1) * 100 >= 0 ? '+' : ''}${String(+((iB / iA - 1) * 100).toFixed(2)).replace('.', ',')} %), вместе с ним — T<sub>м</sub> и M<sub>вр</sub> и все последующие расчёты.`;
+      return { la: 'Как рассчитано', a: body(Ra, Rb), lb: 'До целого', b: body(Rb, Ra), b_on: on, note };
     },
     logo() {
       const page = l => `<div class="ex-paper title">${l ? '<b class="ex-logo">КНИТУ</b>' : ''}<p>МИНОБРНАУКИ РОССИИ</p><p>Федеральное государственное бюджетное образовательное учреждение высшего образования</p><p>«Казанский национальный исследовательский технологический университет»</p></div>`;
@@ -199,6 +203,54 @@
   }
   function sw(key) {
     return `<label class="sw"><input type="checkbox" data-tkey="${key}" ${S.T[key] ? 'checked' : ''}><span class="track" aria-hidden="true"></span><span class="sr">вкл.</span></label>`;
+  }
+  /* ---------- слоты сохранений ---------- */
+  const SLOT_KEY = 'ep-slots', SLOT_N = 5;
+  function getSlots() { let a = null; try { a = JSON.parse(localStorage.getItem(SLOT_KEY) || 'null'); } catch (e) { a = null; } a = Array.isArray(a) ? a : []; while (a.length < SLOT_N) a.push(null); return a.slice(0, SLOT_N); }
+  function putSlots(a) { try { localStorage.setItem(SLOT_KEY, JSON.stringify(a)); return true; } catch (e) { toast('Браузер не разрешает сохранять данные на этой странице'); return false; } }
+  function slotMeta(sl) {
+    const d = new Date(sl.at), pad = x => String(x).padStart(2, '0');
+    const mo = sl.mo ? ' · ' + esc(sl.mo) : '';
+    return `Вариант ${sl.P.variant}${mo}${sl.T && sl.T.student ? ' · ' + esc(sl.T.student) : ''} · ${pad(d.getDate())}.${pad(d.getMonth() + 1)}.${d.getFullYear()} ${pad(d.getHours())}:${pad(d.getMinutes())}`;
+  }
+  function slotsHtml() {
+    return getSlots().map((sl, k) => `<div class="opt slot${sl ? '' : ' empty'}"><div class="opt-t"><b><i class="slot-no">${k + 1}</i>${sl ? esc(sl.name) : 'Пустой слот'}</b><span>${sl ? slotMeta(sl) : 'Сохраните сюда текущее состояние'}</span></div><div class="opt-c slot-act">
+      <button class="btn" data-slot-save="${k}">${sl ? 'Перезаписать' : 'Сохранить'}</button>${sl ? `<button class="btn primary" data-slot-load="${k}">Загрузить</button><button class="btn icon-x" data-slot-del="${k}" title="Удалить" aria-label="Удалить слот ${k + 1}">✕</button>` : ''}</div></div>`).join('');
+  }
+  function bindSlots() {
+    const box = $('#slots'); if (!box) return;
+    const redraw = () => { box.innerHTML = slotsHtml(); bindSlots(); };
+    $$('[data-slot-save]', box).forEach(b => b.onclick = () => {
+      const k = +b.dataset.slotSave, a = getSlots();
+      const def = a[k] ? a[k].name : 'Вариант ' + S.P.variant + (S.T.student ? ' — ' + S.T.student : '');
+      const name = prompt('Название сохранения', def); if (name === null) return;
+      a[k] = { name: name.trim() || def, at: Date.now(), mo: S.R && S.R.lr1 ? S.R.lr1.mo.type : '', P: JSON.parse(JSON.stringify(S.P)), T: JSON.parse(JSON.stringify(S.T)) };
+      if (putSlots(a)) { toast('Сохранено в слот ' + (k + 1)); redraw(); }
+    });
+    $$('[data-slot-load]', box).forEach(b => b.onclick = () => {
+      const sl = getSlots()[+b.dataset.slotLoad]; if (!sl) return;
+      S.P = Object.assign(L.defaults(), sl.P); S.T = Object.assign({}, T_DEF, sl.T || {}); saveT();
+      recompute(); toast('Загружено: ' + sl.name);
+    });
+    $$('[data-slot-del]', box).forEach(b => b.onclick = () => {
+      const k = +b.dataset.slotDel, a = getSlots(); if (!a[k] || !confirm('Удалить сохранение «' + a[k].name + '»?')) return;
+      a[k] = null; if (putSlots(a)) redraw();
+    });
+    const ex = $('#slots-exp'); if (ex) ex.onclick = () => downloadText('electroprivod-sohraneniya.json', JSON.stringify({ app: 'ep-lr', ver: 1, current: { P: S.P, T: S.T }, slots: getSlots() }, null, 1));
+    const im = $('#slots-imp-f'); if (im) im.onchange = () => {
+      const f = im.files && im.files[0]; if (!f) return;
+      const rd = new FileReader();
+      rd.onload = () => {
+        try {
+          const j = JSON.parse(rd.result); if (!j || j.app !== 'ep-lr' || !Array.isArray(j.slots)) throw new Error('fmt');
+          const a = getSlots(); let n = 0;
+          j.slots.forEach(sl => { if (!sl || !sl.P) return; let k = a.findIndex(x => !x); if (k < 0) return; a[k] = sl; n++; });
+          if (putSlots(a)) { toast(n ? 'Импортировано сохранений: ' + n : 'Нет свободных слотов или пустой файл'); redraw(); }
+        } catch (e) { toast('Это не файл сохранений утилиты'); }
+        im.value = '';
+      };
+      rd.readAsText(f);
+    };
   }
   function renderData(main) {
     const P = S.P, R = S.R, V = L.fromVariant(P.variant);
@@ -265,7 +317,15 @@
           <div class="dl-grid">${[1, 2, 3, 4, 5, 6].map(k => `<button class="btn" data-docx="lr${k}">${dlIcon()} ЛР № ${k}</button>`).join('')}<button class="btn primary dl-all" data-docx="all">${dlIcon()} Единый отчёт по ЛР 1–6</button></div>
           <p class="dhint">Отдельный отчёт — на каждую работу; единый — общий титульный лист, каждая работа с новой страницы.</p>
         </section>
+        <section class="dsec">
+          <h2>5. Сохранения</h2>
+          <p class="dlead">Текущее состояние запоминается в браузере автоматически и восстанавливается при следующем открытии. Чтобы держать несколько наборов (например, свой вариант и вариант одногруппника), сохраните их в слоты: в слот попадают все параметры, выбранные элементы, методика расчёта и данные отчёта.</p>
+          <div class="opts slots" id="slots">${slotsHtml()}</div>
+          <div class="dact"><button class="btn" id="slots-exp">${dlIcon()} Экспорт в файл</button><label class="btn" for="slots-imp-f">Импорт из файла</label><input type="file" id="slots-imp-f" accept=".json,application/json" hidden></div>
+          <p class="dhint">Слоты хранятся только в этом браузере на этом устройстве. Чтобы перенести их на другое устройство или не потерять при очистке браузера, сохраните файл экспорта.</p>
+        </section>
       </div></article>`;
+    bindSlots();
     $('#f-motor').value = String(P.motor); $('#f-tach').value = String(P.tach); $('#f-vt').value = String(P.vt);
     $('#f-C1').value = String(P.C1); $('#f-C2').value = String(P.C2);
     $$('#main input[data-key], #main select[data-key]').forEach(el => el.addEventListener('change', onField));

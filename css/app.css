@@ -372,3 +372,17 @@ details.adv > .in { padding: 0 14px 14px; border-top: 1px solid var(--line); }
 .ex-tbl tr.on td { color: var(--fg); font-weight: 600; background: var(--accent-soft); }
 .ex-tbl td span { font: 600 10px/1 var(--f-body); text-transform: uppercase; letter-spacing: .05em; background: var(--accent); color: var(--accent-ink); padding: 2px 5px; border-radius: 8px; margin-left: 4px; }
 .ex-wide .ex-b { overflow-x: auto; }
+
+.ex-f mark, .ex-p mark { background: color-mix(in srgb, var(--accent-2) 22%, transparent); color: inherit; border-radius: 3px; padding: 0 2px; }
+.ex-note { grid-column: 1 / -1; margin: 0; max-width: none; padding: 7px 10px; font-size: 12.5px; color: var(--muted); border-left: 3px solid var(--accent-2); background: var(--sheet-2); border-radius: 0 var(--r) var(--r) 0; }
+
+/* слоты сохранений */
+.slot .opt-t b { display: flex; align-items: center; gap: 8px; }
+.slot-no { font-style: normal; display: inline-grid; place-items: center; width: 22px; height: 22px; border-radius: 50%; border: 1px solid var(--line-strong); font: 600 12px/1 var(--f-mono); color: var(--muted); flex: none; }
+.slot:not(.empty) .slot-no { background: var(--accent); border-color: var(--accent); color: var(--accent-ink); }
+.slot.empty .opt-t b { color: var(--muted); font-weight: 500; }
+.slot .opt-t > span { padding-left: 30px; }
+.slot-act { display: flex; gap: 6px; flex-wrap: wrap; }
+.btn.icon-x { padding: 7px 10px; }
+label.btn { cursor: pointer; }
+@media (max-width: 720px) { .slot { grid-template-columns: 1fr; } .slot .opt-c { justify-self: start; } }
