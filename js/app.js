@@ -132,12 +132,21 @@
   function exHtml(key) {
     const d = PV[key]();
     const box = (lbl, body, on) => `<div class="ex${on ? ' on' : ''}"><div class="ex-h">${lbl}${on ? '<span>сейчас</span>' : ''}</div><div class="ex-b">${body}</div></div>`;
+    if (d.table) return `<div class="ex on ex-wide"><div class="ex-b">${d.table}</div></div>`;
+    if (d.items) return `<div class="ex-multi" style="--n:${d.items.length}">${d.items.map(it => box(it.l, it.body, it.on)).join('')}</div>`;
     return box(d.la, d.a, !d.b_on) + box(d.lb, d.b, d.b_on);
   }
   function altR(patch) { try { return L.compute(Object.assign({}, S.P, patch)); } catch (e) { return S.R; } }
   const F = (t) => `<div class="ex-f">${t}</div>`;
   const TX = (t) => `<p class="ex-p">${t}</p>`;
   const PV = {
+    dec() {
+      const o = S.R.lr1, cur = S.P.dec === undefined ? -1 : +S.P.dec;
+      const w = k => k === 1 ? 'знак' : k < 5 ? 'знака' : 'знаков';
+      const f = (x, k) => k < 0 ? L.fauto(x) : L.fdec(x, k);
+      const cols = [['P<sub>тр</sub>, Вт', o.Ptr], ['Ω<sub>ном</sub>, рад/с', o.me.Wn], ['R<sub>д2</sub>, Ом', o.Rd2], ['C<sub>u</sub>, В·с/рад', o.Cu]];
+      return { table: `<table class="ex-tbl"><thead><tr><th>Режим</th>${cols.map(c => `<th>${c[0]}</th>`).join('')}</tr></thead><tbody>${[-1, 1, 2, 3, 4, 5, 6].map(k => `<tr class="${k === cur ? 'on' : ''}"><td>${k < 0 ? 'Авто' : k + ' ' + w(k)}${k === cur ? ' <span>сейчас</span>' : ''}</td>${cols.map(c => `<td>${f(c[1], k)}</td>`).join('')}</tr>`).join('')}</tbody></table>` };
+    },
     deg57() {
       const on = !!S.P.deg57, Ra = on ? altR({ deg57: 0 }) : S.R, Rb = on ? S.R : altR({ deg57: 57 }), W = S.P.W, E = S.P.E;
       const body = (k, r) => F(`Ω<sub>max</sub> = ${k ? W + '/57' : W + '·π/180'} = ${fnum(r.lr1.Wm, 4)} рад/с`) + F(`ε<sub>max</sub> = ${k ? E + '/57' : E + '·π/180'} = ${fnum(r.lr1.Em, 4)} рад/с²`) + TX(`Дальше: P<sub>тр</sub> = ${fnum(r.lr1.Ptr, 4)} Вт, двигатель ${r.lr1.mo.type} (${fnum(r.lr1.mo.P)} кВт)`);
@@ -145,14 +154,17 @@
     },
     roundManual() {
       const on = !!S.P.roundManual, Ra = on ? altR({ roundManual: false }) : S.R, Rb = on ? S.R : altR({ roundManual: true });
-      const v = (x, r) => fnum(r ? x : +x.toPrecision(6));
+      const v = (x, r) => r ? fnum(x) : String(+x.toPrecision(6)).replace('.', ',');
       const body = (r, rr) => F(`c = ${v(r.lr1.c, rr)} В·с/рад`) + F(`T<sub>м</sub> = ${v(r.lr1.Tm, rr)} с,&nbsp; T<sub>э</sub> = ${v(r.lr1.Te, rr)} с`) + F(`K<sub>ос</sub> = ${v(r.lr1.Kos, rr)} В·с/рад`);
       return { la: 'Полная точность', a: body(Ra, false), lb: 'Округлять (как в методичке)', b: body(Rb, true), b_on: on };
     },
     roundGear() {
       const on = !!S.P.roundGear, Ra = on ? altR({ roundGear: false }) : S.R, Rb = on ? S.R : altR({ roundGear: true });
-      const body = r => F(`i<sub>о</sub> = ${fnum(+r.lr1.me.i0.toPrecision(6))}`) + F(`принято i = ${fnum(+r.lr1.i.toPrecision(6))}`) + TX(`Дальше: T<sub>м</sub> = ${fnum(+r.lr1.Tm.toPrecision(4))} с, M<sub>вр</sub> = ${fnum(+r.lr1.me.Mvr.toPrecision(4))} Н·м`);
-      return { la: 'Как рассчитано', a: body(Ra), lb: 'До целого', b: body(Rb), b_on: on };
+      const g = x => String(+x.toPrecision(6)).replace('.', ',');
+      const body = r => { const me = r.lr1.me; return F(`i<sub>о</sub> = ${g(me.i0)}`) + (me.speedOk ? '' : F(`i<sub>1</sub> = ${g(me.i)}`)) + F(`принято i = ${g(r.lr1.i)}`) + TX(`Дальше: T<sub>м</sub> = ${g(r.lr1.Tm)} с, M<sub>вр</sub> = ${g(me.Mvr)} Н·м`); };
+      const same = Math.abs(Ra.lr1.i - Rb.lr1.i) < 1e-9;
+      const tail = same ? TX('В этом варианте принятое i и так получается целым — разница только в i<sub>о</sub>.') : '';
+      return { la: 'Как рассчитано', a: body(Ra) + tail, lb: 'До целого', b: body(Rb) + tail, b_on: on };
     },
     logo() {
       const page = l => `<div class="ex-paper title">${l ? '<b class="ex-logo">КНИТУ</b>' : ''}<p>МИНОБРНАУКИ РОССИИ</p><p>Федеральное государственное бюджетное образовательное учреждение высшего образования</p><p>«Казанский национальный исследовательский технологический университет»</p></div>`;
@@ -223,6 +235,7 @@
           <h2>3. Методика расчёта</h2>
           <p class="dlead">Как переводить и округлять величины. Вариант «как в методичке» воспроизводит её приближённые числа, точный — даёт полную точность.</p>
           <div class="opts">
+            ${optRow('Точность вывода чисел', '«Авто» — 4 значащие цифры, целая часть не округляется (114,3; 0,06162; 12356). Цифра — фиксированное число знаков после запятой. На сам расчёт не влияет.', seg('P', 'dec', P.dec === undefined ? -1 : +P.dec, [[-1, 'Авто'], [1, '1'], [2, '2'], [3, '3'], [4, '4'], [5, '5'], [6, '6']], 'num'))}
             ${optRow('Перевод градусов в радианы', 'Для Ω<sub>max</sub>, ε<sub>max</sub>, α<sub>max</sub> и пересчёта ошибок в угловые минуты.', seg('P', 'deg57', P.deg57 ? 57 : 0, [[0, 'Точно, ×π/180'], [57, 'Делением на 57']], 'num'))}
             ${optRow('Промежуточные параметры', 'c, T<sub>м</sub>, T<sub>э</sub>, T<sub>тп</sub>, K<sub>ос</sub>, T<sub>ф</sub>… — до 0,001; параметры регуляторов — до 3 значащих цифр.', seg('P', 'roundManual', !!P.roundManual, [[false, 'Полная точность'], [true, 'Округлять']], 'bool'))}
             ${optRow('Передаточное число редуктора', 'В примерах методички округляется до целого: i = 69, i = 882.', seg('P', 'roundGear', !!P.roundGear, [[false, 'Как рассчитано'], [true, 'До целого']], 'bool'))}
@@ -286,7 +299,7 @@
     S.P[k] = v;
     recompute();
   }
-  function setVariant(v) { v = Math.min(222, Math.max(1, v)); const keep = {}; ['roundManual', 'roundGear', 'deg57'].forEach(k => keep[k] = S.P[k]); S.P = Object.assign(L.fromVariant(v), keep); recompute(); }
+  function setVariant(v) { v = Math.min(222, Math.max(1, v)); const keep = {}; ['roundManual', 'roundGear', 'deg57', 'dec'].forEach(k => keep[k] = S.P[k]); S.P = Object.assign(L.fromVariant(v), keep); recompute(); }
 
   /* ---------- вкладки ЛР ---------- */
   function kpis(tab) {

@@ -12,8 +12,31 @@
   const D2R = P => P && P.deg57 ? 1 / 57 : d2r;
 
   /* ---------- форматирование ---------- */
+  let DIG = -1;  // точность вывода: −1 — авто (4 значащие цифры без округления целой части), иначе знаков после запятой (P.dec)
+  /* число знаков после запятой; у малых чисел — не меньше двух значащих цифр */
+  function fdec(x, N) {
+    if (x === null || x === undefined || isNaN(x)) return '—';
+    if (!isFinite(x)) return x > 0 ? '∞' : '−∞';
+    if (x === 0) return '0';
+    const ax = Math.abs(x);
+    if (ax >= 1e6 || ax < 1e-4) return fnum(x, N + 1);
+    let s = ax < Math.pow(10, 1 - N) ? x.toPrecision(2) : x.toFixed(N);
+    s = parseFloat(s).toString();
+    return s.replace('.', ',');
+  }
+  /* авто: 4 значащие цифры, но целая часть никогда не округляется */
+  function fauto(x) {
+    if (x === null || x === undefined || isNaN(x)) return '—';
+    if (!isFinite(x)) return x > 0 ? '∞' : '−∞';
+    if (x === 0) return '0';
+    const ax = Math.abs(x);
+    if (ax >= 1e6 || ax < 1e-4) return fnum(x, 4);
+    const d = Math.floor(Math.log10(ax)) + 1;
+    const s = d >= 4 ? String(Math.round(x)) : parseFloat(x.toPrecision(4)).toString();
+    return s.replace('.', ',');
+  }
   function fnum(x, sig) {
-    sig = sig || 4;
+    if (!sig) return DIG < 0 ? fauto(x) : fdec(x, DIG);
     if (x === null || x === undefined || isNaN(x)) return '—';
     if (!isFinite(x)) return x > 0 ? '∞' : '−∞';
     if (x === 0) return '0';
@@ -26,7 +49,7 @@
       return ms.replace('.', ',') + '·10^' + e;
     }
     let s;
-    if (ax >= 1000) { const dec = Math.max(0, sig - (Math.floor(Math.log10(ax)) + 1)); s = parseFloat(x.toFixed(dec)).toString(); }
+    if (ax >= 1000) { const d = Math.floor(Math.log10(ax)) + 1; s = d > sig ? String(Math.round(x / Math.pow(10, d - sig)) * Math.pow(10, d - sig)) : parseFloat(x.toFixed(sig - d)).toString(); }
     else s = parseFloat(x.toPrecision(sig)).toString();
     return s.replace('.', ',');
   }
@@ -93,7 +116,7 @@
       Uz: 10, dUw: 10, Uos: 10, Ua: 10,
       f: 50, mph: 3, p: 6, gamma: 30, kId: 0.2, xa: 0, p1: 10, KI: 2.5, Kv: 0.33,
       Rd1: 10000, Tf0: 0.01, Nr: 10, T0: 0.001, T1zh: 'auto',
-      roundManual: true, roundGear: true, deg57: 0,
+      roundManual: true, roundGear: true, deg57: 0, dec: -1,
       motor: 'auto', tach: 3, vt: 6, C1: 'auto', C2: 'auto',
       lr5mode: 'auto'
     };
@@ -128,6 +151,7 @@
    * ГЛАВНЫЙ РАСЧЁТ
    * ================================================================= */
   function compute(P) {
+    DIG = P.dec === undefined || +P.dec < 0 ? -1 : Math.min(6, +P.dec);
     const R = {}; R.P = P;
     const rp = P.roundManual ? r3 : (x => x);
     const rs = P.roundManual ? s3 : (x => x);
@@ -827,6 +851,6 @@
     return { s1, s2, s3, info, errEnd, mcEnd };
   }
 
-  const api = { compute, defaults, fromVariant, fnum, n, m, mvec, mmat, simLR2, simSpeed, simPos, polyTex, tfTex, evalMotor, step };
+  const api = { compute, defaults, fromVariant, fnum, fdec, fauto, n, m, mvec, mmat, simLR2, simSpeed, simPos, polyTex, tfTex, evalMotor, step };
   if (typeof module !== 'undefined' && module.exports) module.exports = api; else root.LABS = api;
 })(typeof window !== 'undefined' ? window : globalThis);
