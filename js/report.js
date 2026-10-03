@@ -69,7 +69,7 @@
       switch (it.k) {
         case 'h': doc.p(it.t.replace(/^(\d+(?:\.\d+)*)\.\s+/, '$1 ').replace(/\.$/, ''), { style: 'Heading2' }); break;
         case 'p': it.t.split(/<br\s*\/?>/).forEach(part => { const x = part.replace(/^\s*•\s*/, ''); if (x.trim()) doc.html(x, /:\s*$/.test(x) ? { keepNext: true } : undefined); }); break;
-        case 'note': doc.p([{ t: 'Примечание — ' }].concat(doc.htmlSegs(it.t.replace(/<[^>]+>/g, m => m).replace(/^([^<]*)$/, x => symHtml(x)))), { style: 'Note' }); break;
+        case 'note': break;   // примечания утилиты в отчёт не попадают (кроме заданных через .rep — они уже стали абзацами)
         case 'tex': {
           const d = opt.explain && root.EXPLAIN ? EXPLAIN.texDesc(it.t) : '';
           if (d) doc.html(symHtml(d.replace(/\.$/, ':')), { keepNext: true });
