@@ -26,11 +26,11 @@
   const S = { P: null, R: null, sims: {}, tab: 'data', err: null, T: null };
   const T_DEF = {
     org: 'МИНОБРНАУКИ РОССИИ\nФедеральное государственное бюджетное образовательное учреждение\nвысшего образования\n«Казанский национальный исследовательский технологический университет»\n(ФГБОУ ВО «КНИТУ»)',
-    dept: '', discipline: 'Конструирование роботов и робототехнических систем', kind: 'лабораторной работе', kindPlural: 'лабораторным работам',
+    dept: '', discipline: 'Системы автоматизированного проектирования', kind: 'лабораторной работе', kindPlural: 'лабораторным работам',
     group: '741-15', student: '', teacher: 'Малев Н. А.', city: 'Казань', year: String(new Date().getFullYear()),
     logo: true, explain: true, listings: false, readable: true, watermark: true, codePlain: true
   };
-  function loadT() { let t = null; try { t = JSON.parse(localStorage.getItem('ep-title') || 'null'); } catch (e) { t = null; } S.T = Object.assign({}, T_DEF, t || {}); if (S.T.discipline === 'Системы управления электроприводов') S.T.discipline = T_DEF.discipline; }
+  function loadT() { let t = null; try { t = JSON.parse(localStorage.getItem('ep-title') || 'null'); } catch (e) { t = null; } S.T = Object.assign({}, T_DEF, t || {}); if (S.T.discipline === 'Системы управления электроприводов' || S.T.discipline === 'Конструирование роботов и робототехнических систем') S.T.discipline = T_DEF.discipline; }
   function saveT() { try { localStorage.setItem('ep-title', JSON.stringify(S.T)); } catch (e) { /* ignore */ } autoSave(); }
   function save() { try { localStorage.setItem('ep-lr-state', JSON.stringify({ P: S.P, tab: S.tab })); } catch (e) { /* хранилище недоступно */ } autoSave(); }
   /* автосохранение: снимок после каждого изменения (с задержкой); загрузка слота его не перезаписывает */
@@ -431,11 +431,10 @@
             ${optRow('Улучшение читаемости', 'Не разрывать абзацы, списки, листинги и пояснение с формулой между страницами.', sw('readable'))}
           </div>
           <h3>Скачать</h3>
-          <div class="dl-grid">${[1, 2, 3, 4, 5, 6].map(k => `<button class="btn" data-docx="lr${k}">${dlIcon()} ЛР № ${k}</button>`).join('')}<button class="btn primary dl-all" data-docx="all">${dlIcon()} Единый отчёт по ЛР 1–6</button></div>
-          <p class="dhint">Отдельный отчёт — на каждую работу; единый — общий титульный лист, каждая работа с новой страницы.</p>
-          <h3>Архив всех работ</h3>
-          <div class="dact"><button class="btn" id="zip-all">${dlIcon()} Скачать архив ЛР 1–6 (.zip)</button></div>
-          <p class="dhint">Все скрипты MATLAB и программы CoDeSys по работам, отчёты Word (отдельные и единый), полный расчёт в HTML, графики PNG и данные CSV.</p>
+          <div class="dl-grid"><button class="btn primary dl-all" data-docx="all">${dlIcon()} Единый отчёт по ЛР 1–6 (.docx)</button>${[1, 2, 3, 4, 5, 6].map(k => `<button class="btn" data-docx="lr${k}">${dlIcon()} ЛР № ${k}</button>`).join('')}</div>
+          <p class="dhint">Единый отчёт — общий титульный лист, каждая работа с новой страницы; отдельные — по одному на работу.</p>
+          <div class="dact"><button class="btn" id="zip-all">${dlIcon()} Архив ЛР 1–6 (.zip)</button></div>
+          <p class="dhint">Архив: все скрипты MATLAB и программы CoDeSys по работам, отчёты Word (отдельные и единый), полный расчёт в HTML, графики PNG и данные CSV.</p>
         </section>
         <section class="dsec">
           <h2>5. Сохранения</h2>
@@ -1340,7 +1339,7 @@ ${parts.join('\n')}</body></html>`;
   let toastT = null;
   function toast(t) {
     let el = $('#toast'); if (!el) { el = document.createElement('div'); el.id = 'toast'; el.className = 'toast'; el.setAttribute('role', 'status'); document.body.appendChild(el); }
-    el.textContent = t; el.hidden = false; clearTimeout(toastT); toastT = setTimeout(() => { el.hidden = true; }, 2600);
+    el.textContent = t; el.hidden = false; clearTimeout(toastT); toastT = setTimeout(() => { el.hidden = true; }, 2800);
   }
   function go(tab) { S.tab = tab; S.skipAuto = true; save(); setHash(); renderTab(); window.scrollTo({ top: 0 }); }
   function themeToggle() {
@@ -1348,12 +1347,12 @@ ${parts.join('\n')}</body></html>`;
     const cur = r.getAttribute('data-theme') || (matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light');
     const nx = cur === 'dark' ? 'light' : 'dark';
     r.setAttribute('data-theme', nx);
-    try { localStorage.setItem('ep-theme', nx); } catch (e) { /* ignore */ }
+    try { localStorage.setItem('suite-theme', nx); } catch (e) { /* ignore */ }
     if (S.tab !== 'data') renderTab();
   }
 
   function init() {
-    try { const th = localStorage.getItem('ep-theme'); if (th) document.documentElement.setAttribute('data-theme', th); } catch (e) { /* ignore */ }
+    try { const th = localStorage.getItem('suite-theme'); if (th) document.documentElement.setAttribute('data-theme', th); } catch (e) { /* ignore */ }
     $('#rail').innerHTML = LABS_META.map(m => `<a href="#" data-tab="${m.id}"><span class="no" data-short="${m.short}">${m.no === '0' ? '◦' : m.no}</span><span class="t">${m.t}</span><span class="s">${m.s}</span></a>`).join('') + '<div class="rail-foot" id="rail-foot"></div>';
     $$('nav.rail a').forEach(a => a.onclick = e => { e.preventDefault(); go(a.dataset.tab); });
     $('#var-sel').onchange = e => setVariant(+e.target.value);
