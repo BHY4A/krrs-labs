@@ -1,1 +1,1 @@
-https://bhy4a.github.io/krrs-labs
+https://bhy4a.github.io/sapr-labs
