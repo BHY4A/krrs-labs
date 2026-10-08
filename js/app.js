@@ -912,6 +912,30 @@
     }
     return [];
   }
+  /* что запустить и какие рисунки сайта получатся для каждого файла */
+  const FILEMETA = {
+    'lr1_raschet.m': { result: 'Параметры двигателя, ТП, тахогенератора и ВТ — в Command Window; сверьте с расчётом выше.' },
+    'lr2_raschet.m': { figs: ['lr2_w', 'lr2_e'], result: 'Ошибки Δu и Ω(t) по формулам и средствами Control System Toolbox.' },
+    'lr2_model.m': { figs: ['lr2_w', 'lr2_e'], result: 'Модель lr2_model.slx; значения блока Display — в Command Window.' },
+    'lr3_raschet.m': { figs: ['lr3_bode', 'lr3_step', 'lr3_dist'], result: 'Регулятор скорости, запасы устойчивости, переходные процессы, RC-элементы.' },
+    'lr3_model.m': { figs: ['lr3_step', 'lr3_dist'], result: 'Модель lr3_model.slx: Ω(t) по заданию и по моменту, σ и tн — в Command Window.' },
+    'lr4_raschet.m': { figs: ['lr4_reg', 'lr4_bode', 'lr4_nyq'], result: 'Цифровой регулятор, ЛПЧХ и АФЧХ, запасы устойчивости.' },
+    'lr4_model.m': { figs: ['lr4_step', 'lr4_dist'], result: 'Модель lr4_model.slx с блоком Discrete State-Space.' },
+    'PLC_PRG.st': { run: 'вставить в PLC_PRG проекта CoDeSys', result: 'Рабочая программа цифрового регулятора скорости для ПЛК154.' },
+    'lr5_raschet.m': { figs: ['lr5_zh', 'lr5_bode_pid', 'lr5_step_pid', 'lr5_err_pid', 'lr5_bode_id', 'lr5_step_id', 'lr5_err_id'], result: 'Желаемые ЛАЧХ, регуляторы положения и их проверка для ν = 2 и ν = 1.' },
+    'lr5_model_pid.m': { figs: ['lr5_step_pid', 'lr5_err_pid', 'lr5_mc_pid'], result: 'Модель рис. 5.5: три опыта — шаг, εmax·t²/2, момент.' },
+    'lr5_model_id.m': { figs: ['lr5_step_id', 'lr5_err_id', 'lr5_mc_id'], result: 'Модель рис. 5.10: три опыта — шаг, Ωmax·t, момент.' },
+    'lr6_raschet.m': { result: 'Коэффициенты цифровых регуляторов положения (сверьте с «ожидаемыми» в комментариях) и ЛАЧХ регуляторов.' },
+    'lr6_model_pid.m': { figs: ['lr6_step_pid', 'lr6_err_pid', 'lr6_mc_pid'], result: 'Модель рис. 6.1 с цифровыми РП и РС.' },
+    'lr6_model_id.m': { figs: ['lr6_step_id', 'lr6_err_id', 'lr6_mc_id'], result: 'Модель рис. 6.5.' },
+    'PLC_PRG_RP2.st': { run: 'вставить в PLC_PRG проекта CoDeSys', result: 'Цифровой ПИД-регулятор положения (ν = 2).' },
+    'PLC_PRG_RP1.st': { run: 'вставить в PLC_PRG проекта CoDeSys', result: 'Цифровой регулятор положения (ν = 1).' }
+  };
+  function figNo(tab, id) {
+    const rep = S.R['L' + tab.slice(2)]; if (!rep) return '';
+    const k = rep.items.filter(it => it.k === 'plot' && !it.repOnly).findIndex(it => it.id === id);
+    return k < 0 ? '' : tab.slice(2) + '.' + (k + 1);
+  }
   /* ---------- подсказка: что вписать в блоки Simulink ---------- */
   // вычисление простых выражений MATLAB (числа, матрицы, + - * / ^, pi) по переменным скрипта
   function mToJs(e) {
@@ -990,8 +1014,15 @@
   }
   function filesPanel(tab) {
     const files = labFiles(tab);
-    return `<section class="files" aria-label="Файлы для MATLAB"><div class="files-head"><div><h3>Файлы для MATLAB</h3><p>Запускайте по порядку; каждый файл самодостаточен — параметры варианта записаны внутри.</p></div><span style="display:flex;gap:8px;flex-wrap:wrap"><button class="btn" data-docx="${tab}">${dlIcon()} Отчёт Word</button><button class="btn primary" data-zip="${tab}">${dlIcon()} ZIP этой работы</button></span></div>
-      ${files.map((f, k) => `<div class="file-row" data-file="${k}"><div><div class="fn"><span class="step-no">${k + 1}</span>${esc(f.path.split('/')[1])}</div><div class="fd">${esc(f.desc)}</div></div><div class="acts"><button class="btn sm" data-fview="${k}">Показать</button><button class="btn sm" data-fcopy="${k}">Копировать</button><button class="btn sm" data-fdl="${k}">Скачать</button></div><div class="file-view" hidden></div></div>`).join('')}</section>`;
+    const items = files.map((f, k) => {
+      const name = f.path.split('/')[1], meta = FILEMETA[name] || {}, run = meta.run || name.replace(/\.m$/, '');
+      const figs = (meta.figs || []).map(id => figNo(tab, id)).filter(Boolean).map((no, j) => `<button class="fig-link" data-fig="${meta.figs[j]}">Рис. ${no}</button>`).join(' ');
+      return `<li class="step"><div class="step-top"><span class="step-no">${k + 1}</span><div class="step-t"><h4 class="mono">${esc(name)}</h4><div class="step-sec">${esc(f.desc)}</div></div><span class="acts"><button class="btn sm" data-fview="${k}">Показать</button><button class="btn sm" data-fcopy="${k}">Копировать</button><button class="btn sm primary" data-fdl="${k}">${dlIcon()} Скачать</button></span></div>
+        <dl class="step-kv"><dt>${meta.run ? 'Что сделать' : 'Запустить'}</dt><dd>${meta.run ? esc(meta.run) : `<code class="run">${esc(run)}</code>`}</dd>
+        <dt>Результат</dt><dd>${figs ? figs + ' — ' : ''}${esc(meta.result || f.desc)}</dd></dl><div class="file-view" hidden></div></li>`;
+    }).join('');
+    return `<section class="files" aria-label="Файлы для MATLAB"><div class="files-head"><div><h3>Файлы для MATLAB</h3><p>Запускайте по порядку; каждый файл самодостаточен — параметры варианта записаны внутри. Рисунки открываются с теми же номерами, что на этой странице, и сохраняются в PNG в папку <code>figures</code> рядом со скриптом (отключить: <code>save_figs = false</code> в начале файла).</p></div><span style="display:flex;gap:8px;flex-wrap:wrap"><button class="btn" data-docx="${tab}">${dlIcon()} Отчёт Word</button><button class="btn primary" data-zip="${tab}">${dlIcon()} ZIP этой работы</button></span></div>
+      <ol class="steps">${items}</ol></section>`;
   }
   function bindFiles(root) {
     const files = labFiles(S.tab);
@@ -1001,12 +1032,13 @@
     $$('[data-fcopy]', root).forEach(b => b.onclick = () => copyText(files[+b.dataset.fcopy].gen()));
     $$('[data-fdl]', root).forEach(b => b.onclick = () => { const f = files[+b.dataset.fdl]; downloadText(f.path.split('/')[1], f.gen()); });
     $$('[data-fview]', root).forEach(b => b.onclick = () => {
-      const row = b.closest('.file-row'), v = row.querySelector('.file-view'), f = files[+b.dataset.fview];
+      const row = b.closest('.step'), v = row.querySelector('.file-view'), f = files[+b.dataset.fview];
       if (v.hidden) { v.innerHTML = `<pre class="src">${hl(f.gen(), f.lang)}</pre>`; v.hidden = false; b.textContent = 'Скрыть'; }
       else { v.hidden = true; v.innerHTML = ''; b.textContent = 'Показать'; }
     });
     $$('[data-zip]', root).forEach(b => b.onclick = () => zipLab(b.dataset.zip, b));
     $$('[data-docx]', root).forEach(b => b.onclick = () => makeDocx([b.dataset.docx], b));
+    $$('[data-fig]', root).forEach(b => b.onclick = () => { const el = $('#p-' + b.dataset.fig); if (el) { const fg = el.closest('figure') || el; fg.scrollIntoView({ behavior: 'smooth', block: 'center' }); fg.classList.remove('flash'); void fg.offsetWidth; fg.classList.add('flash'); } });
   }
   function dlIcon() { return '<svg width="15" height="15" viewBox="0 0 16 16" aria-hidden="true"><path d="M8 1v9m0 0L4.5 6.5M8 10l3.5-3.5M2 12v2.5h12V12" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg>'; }
 

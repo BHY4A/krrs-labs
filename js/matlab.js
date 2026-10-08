@@ -8,7 +8,7 @@
   const LABS = root.LABS || (typeof require !== 'undefined' ? require('./labs.js') : null);
   const m = LABS.m, mvec = LABS.mvec, mmat = LABS.mmat;
 
-  function header(title, R) {
+  function header(title, R, noFigs) {
     return `%% ${title}
 % Вариант ${R.P.variant}. Файл сформирован веб-утилитой «Электропривод: ЛР 1–6».
 % Методика: Погодицкий О.В. и др. «Расчёт и моделирование электроприводов
@@ -16,8 +16,29 @@
 % Требуется MATLAB R2022 (Control System Toolbox; для bilinear/tf2ss —
 % Signal Processing Toolbox, при его отсутствии используются встроенные замены).
 clear; clc; close all;
-`;
+${noFigs ? '' : 'save_figs = true;   % true — сохранять рисунки в PNG (папка figures рядом со скриптом)\n'}`;
   }
+  /* сохранение всех окон Figure в PNG: имя файла — <скрипт>_Ris_<этап>_<номер>, как рисунки на сайте */
+  const savePng = `
+%% Сохранение рисунков в PNG (папка figures)
+if save_figs
+    if ~exist('figures', 'dir'), mkdir('figures'); end
+    fl = findobj(0, 'Type', 'figure'); [~, ix] = sort([fl.Number]); fl = fl(ix);
+    scr = mfilename; if isempty(scr), scr = 'lr'; end
+    for k = 1:numel(fl)
+        tk = regexp(get(fl(k), 'Name'), 'Рис\\. (\\d+)\\.(\\d+)', 'tokens', 'once');
+        if isempty(tk), nm = sprintf('%s_fig%d', scr, k); else, nm = sprintf('%s_Ris_%s_%s', scr, tk{1}, tk{2}); end
+        f = fullfile('figures', [nm '.png']);
+        drawnow;
+        try
+            exportgraphics(fl(k), f, 'Resolution', 200);   % R2020a и новее
+        catch
+            set(fl(k), 'PaperPositionMode', 'auto'); print(fl(k), f, '-dpng', '-r200');
+        end
+        fprintf('Рисунок сохранён: %s\\n', f);
+    end
+end
+`;
   // общий блок параметров (одинаковый во всех скриптах — каждый файл самодостаточен)
   function params(R) {
     const P = R.P, o = R.lr1, l2 = R.lr2, l3 = R.lr3;
@@ -97,7 +118,7 @@ end
   /* ---------------- ЛР1 ---------------- */
   function lr1(R) {
     const P = R.P, o = R.lr1;
-    return header('ЛР №1. Выбор и расчёт элементов электропривода', R) + `
+    return header('ЛР №1. Выбор и расчёт элементов электропривода', R, true) + `
 Jn = ${m(P.Jn)}; Mc0 = ${m(P.Mc)}; eta = ${m(P.eta)};
 Wmax = ${m(P.W)}${P.deg57 ? '/57' : '*pi/180'};  Emax = ${m(P.E)}${P.deg57 ? '/57' : '*pi/180'};
 
@@ -188,14 +209,16 @@ w = w_u + lsim(Wmc, mc, t);
 e = Uz - lsim(Wos, w, t);                        % сигнал рассогласования (блок Display)
 k1 = find(t >= 0.99, 1);
 fprintf('Моделирование: du_u = %.4g В, du = %.4g В, du_Mc = %.4g В\\n', e(k1), e(end), e(end) - e(k1));
-figure('Name', 'ЛР2: Ω(t)'); plot(t, w); xlabel('t, c'); ylabel('\\Omega_{дв}, рад/с');
+figure('Name', 'Рис. 2.1. Угловая скорость Ωдв(t)'); plot(t, w); xlabel('t, c'); ylabel('\\Omega_{дв}, рад/с');
 title('Нескорректированный контур скорости (Mc приложен при t = 1 c)');
+figure('Name', 'Рис. 2.2. Сигнал рассогласования Δu(t)'); plot(t, e); xlabel('t, c'); ylabel('\\Deltau, В');
+title('Сигнал рассогласования (блок Display)');
 S = stepinfo(w_u(t<1), t(t<1), 'SettlingTimeThreshold', 0.05);
 fprintf('Перерегулирование %.2f %%, время переходного процесса %.3f с\\n', S.Overshoot, S.SettlingTime);
 fprintf('Ωуст (без нагрузки) = %.4g рад/с, после наброса Mc = %.4g рад/с\\n', w_u(end), w(end));
 
 % Модель Simulink (рис. 2.15/2.17) строится скриптом lr2_model.m
-`;
+` + savePng;
   }
 
   /* ---------- построитель моделей Simulink ---------- */
@@ -310,9 +333,11 @@ fprintf('Ошибка по заданию   du_u  = %.4g В (Display до наб
 fprintf('Суммарная ошибка    du    = %.4g В (Display в конце)\\n', E(end));
 fprintf('Моментная ошибка    du_Mc = %.4g В\\n', E(end) - E(k1));
 fprintf('Ωуст = %.4g рад/с -> %.4g рад/с после наброса Mc\\n', W(k1), W(end));
-${plotStyle}figure('Name', 'ЛР2: Ω(t)'); plot(t, W); xlabel('t, c'); ylabel('\\Omega_{дв}, рад/с');
+${plotStyle}figure('Name', 'Рис. 2.1. Угловая скорость Ωдв(t)'); plot(t, W); xlabel('t, c'); ylabel('\\Omega_{дв}, рад/с');
 title('Зависимость угловой скорости от времени (рис. 2.16/2.18)');
-`;
+figure('Name', 'Рис. 2.2. Сигнал рассогласования Δu(t)'); plot(t, E); xlabel('t, c'); ylabel('\\Deltau, В');
+title('Сигнал рассогласования (блок Display)');
+` + savePng;
   }
 
   /* ---------------- ЛР3 ---------------- */
@@ -338,19 +363,19 @@ sys2 = tf(Ktp, [Ttp 1]);            % W_тп(s)
 sys3 = tf(Kdv, [Te*Tm Tm 1]);       % W_дв(s)
 sys4 = tf(Kos, [Tf 1]);             % W_ос(s)
 sys5 = sys1*sys2*sys3*sys4          % W_кс(s)
-${plotStyle}figure('Name', 'ЛР3: ЛЧХ'); margin(sys5); grid on;
+${plotStyle}figure('Name', 'Рис. 3.1. ЛАЧХ и ЛФЧХ разомкнутого контура скорости'); margin(sys5); grid on;
 [Gm, Pm, Wcg, Wcp] = margin(sys5);
 fprintf('Запас по амплитуде %.3g дБ (w = %.4g), запас по фазе %.3g град (wc = %.4g)\\n', 20*log10(Gm), Wcg, Pm, Wcp);
 
 %% Переходные характеристики (CST)
 Phi = feedback(sys1*sys2*sys3, sys4);           % Ω/Uкс
-figure('Name', 'ЛР3: Ω(t) по заданию'); step(Uz*Phi, 0.5); grid on;
+figure('Name', 'Рис. 3.2. Ω(t) по сигналу задания'); step(Uz*Phi, 0.5); grid on;
 S = stepinfo(Uz*Phi);
 fprintf('sigma = %.2f %%, t_н (по 4.7TΣ) = %.4g c\\n', S.Overshoot, 4.7*TS);
 % по моменту сопротивления: Mc0 = -${m(R.P.Mc)} Н*м, Uкс = 0
 Wd  = tf(KMc*[Te 1], [0.1*Te 1]);
 Wmc = -Wd*feedback(tf(1, [Te*Tm Tm 1]), sys1*sys2*Kdv*sys4);   % Ω/Mc
-figure('Name', 'ЛР3: Ω(t) по моменту'); step(-Mc0*Wmc, 1); grid on;
+figure('Name', 'Рис. 3.3. Ω(t) по моменту сопротивления'); step(-Mc0*Wmc, 1); grid on;
 `;
     if (o.caseA && l3.rc && l3.rc.R1 > 0) {
       const rc = l3.rc;
@@ -363,7 +388,7 @@ R1n = ${m(rc.R1)}; R2n = ${m(rc.R2)}; R3n = ${m(rc.R3)};  % номиналы E19
 fprintf('Krc по номиналам = %.4g\\n', R3n/(R1n+R2n));
 `;
     }
-    return s;
+    return s + savePng;
   }
   function lr3model(R) {
     const md = new Model('lr3_model');
@@ -383,14 +408,14 @@ t1 = w.time; W1 = w.signals.values;
 Wust = W1(end); [Wm, km] = max(W1);
 sigma = (Wm - Wust)/Wust*100;  tn = t1(find(W1 >= Wust, 1));
 fprintf('Ωmax = %.4g, Ωуст = %.4g рад/с, sigma = %.2f %%, t_н = %.4g c (4.7TΣ = %.4g c)\\n', Wm, Wust, sigma, tn, 4.7*${m(R.lr3.TS)});
-figure('Name', 'ЛР3: рис. 3.11'); plot(t1, W1); xlabel('t, c'); ylabel('\\Omega(t), рад/с'); title('По сигналу задания');
+figure('Name', 'Рис. 3.2. Ω(t) по сигналу задания (модель)'); plot(t1, W1); xlabel('t, c'); ylabel('\\Omega(t), рад/с'); title('По сигналу задания');
 % 2) по моменту сопротивления (Uкс = 0, Mc0 = -${m(R.P.Mc)})
 set_param([mdl '/Step'], 'After', '0');  set_param([mdl '/Step1'], 'After', num2str(-Mc0));
 out = sim(mdl, 'StopTime', '1');  w = out.get('w_lr3');
-figure('Name', 'ЛР3: рис. 3.12'); plot(w.time, w.signals.values); xlabel('t, c'); ylabel('\\Omega(t), рад/с'); title('По моменту сопротивления');
+figure('Name', 'Рис. 3.3. Ω(t) по моменту сопротивления (модель)'); plot(w.time, w.signals.values); xlabel('t, c'); ylabel('\\Omega(t), рад/с'); title('По моменту сопротивления');
 set_param([mdl '/Step'], 'After', num2str(Uz));  set_param([mdl '/Step1'], 'After', '0');
 save_system(mdl);
-`;
+` + savePng;
   }
 
   /* ---------------- ЛР4 ---------------- */
@@ -414,10 +439,10 @@ Gz  = c2d(Gs, T0, 'zoh');            % непрерывная часть с эк
 Wrz = tf(numd, dend, T0);            % цифровой регулятор W_рс(z)
 Wz  = Wrz*Gz                         % W_кс(z)
 Wv  = d2c(Wz, 'tustin');             % υ-преобразование -> абсолютная псевдочастота
-${plotStyle}figure('Name', 'ЛР4: ЛПЧХ'); margin(Wv); grid on;
+${plotStyle}figure('Name', 'Рис. 4.2. ЛПЧХ разомкнутого цифрового контура скорости'); margin(Wv); grid on;
 [Gm, Pm, Wcg, Wcp] = margin(Wv);
 fprintf('Lз = %.3g дБ (ωπ = %.4g), θз = %.3g град (ωс = %.4g)\\n', 20*log10(Gm), Wcg, Pm, Wcp);
-figure('Name', 'ЛР4: АФЧХ'); nyquist(Wv); grid on;
+figure('Name', 'Рис. 4.3. АФЧХ (псевдочастотная)'); nyquist(Wv); grid on;
 
 %% Вариант методички (рис. 4.13): bilinear всей разомкнутой ПФ W_кс(s)
 % sys5 = tf(num_rc, den_rc)*tf(Ktp,[Ttp 1])*tf(Kdv,[Te*Tm Tm 1])*tf(Kos,[Tf 1]);
@@ -426,10 +451,10 @@ figure('Name', 'ЛР4: АФЧХ'); nyquist(Wv); grid on;
 % Wb = simplify(poly2sym(nd, a)/poly2sym(dd, a));
 
 %% Переходная характеристика цифрового регулятора (рис. 4.16)
-figure('Name', 'ЛР4: регулятор'); step(Wrz, 0.05); grid on; title('Реакция W_{рс}(z) на единичный скачок');
+figure('Name', 'Рис. 4.1. Переходная характеристика цифрового регулятора'); step(Wrz, 0.05); grid on; title('Реакция W_{рс}(z) на единичный скачок');
 
 %% Рабочая программа для CoDeSys — см. файл PLC_PRG.st
-` + fallbacks;
+` + savePng + fallbacks;
   }
   function lr4model(R) {
     const md = new Model('lr4_model');
@@ -453,13 +478,13 @@ ${plotStyle}out = sim(mdl, 'StopTime', '0.5');  w = out.get('w_lr4');
 t1 = w.time; W1 = w.signals.values;
 Wust = W1(end); Wm = max(W1); sigma = (Wm - Wust)/Wust*100; tn = t1(find(W1 >= Wust, 1));
 fprintf('Ωmax = %.4g, Ωуст = %.4g рад/с, sigma = %.2f %%, t_н = %.4g c\\n', Wm, Wust, sigma, tn);
-figure('Name', 'ЛР4: рис. 4.11'); plot(t1, W1); xlabel('t, c'); ylabel('\\Omega(t), рад/с'); title('По сигналу задания (цифровой РС)');
+figure('Name', 'Рис. 4.4. Ω(t) по сигналу задания (цифровой РС)'); plot(t1, W1); xlabel('t, c'); ylabel('\\Omega(t), рад/с'); title('По сигналу задания (цифровой РС)');
 set_param([mdl '/Step'], 'After', '0');  set_param([mdl '/Step1'], 'After', num2str(-Mc0));
 out = sim(mdl, 'StopTime', '1');  w = out.get('w_lr4');
-figure('Name', 'ЛР4: рис. 4.12'); plot(w.time, w.signals.values); xlabel('t, c'); ylabel('\\Omega(t), рад/с'); title('По моменту сопротивления');
+figure('Name', 'Рис. 4.5. Ω(t) по моменту сопротивления (цифровой РС)'); plot(w.time, w.signals.values); xlabel('t, c'); ylabel('\\Omega(t), рад/с'); title('По моменту сопротивления');
 set_param([mdl '/Step'], 'After', num2str(Uz));  set_param([mdl '/Step1'], 'After', '0');
 save_system(mdl);
-`;
+` + savePng;
   }
 
   /* ---------------- ЛР5 ---------------- */
@@ -488,15 +513,15 @@ Wrp2 = Wzh2/sys8                    % точная ПФ регулятора
 % Аппроксимация ЛАЧХ асимптотами (параметры из веб-утилиты):
 Krp2 = ${m(a2.K)}; T1 = ${m(a2.T1)}; T2 = ${m(a2.T2)}; T3 = ${m(a2.T3)};
 Wrp2a = tf(Krp2*conv([T1 1], [T2 1]), conv([T1 0], [T3 1]))
-figure('Name', 'ЛР5: ЛАЧХ РП (ν=2)'); bodemag(Wrp2, Wrp2a, {1e-2, 1e4}); grid on;
+figure('Name', 'Рис. 5.2. ЛАЧХ регулятора положения, ν = 2'); bodemag(Wrp2, Wrp2a, {1e-2, 1e4}); grid on;
 legend('W_{рп}(s) точная', 'аппроксимация'); title('ЛАЧХ регулятора положения, ν = 2');
 L2 = Wrp2a*sys8;  Phi2 = feedback(L2, 1);
-figure('Name', 'ЛР5: α(t) ν=2'); step(Phi2, 4); grid on; title('Переходная характеристика по заданию, ν = 2');
+figure('Name', 'Рис. 5.3. α(t), ν = 2'); step(Phi2, 4); grid on; title('Переходная характеристика по заданию, ν = 2');
 S2 = stepinfo(Phi2); fprintf('ν=2: sigma = %.1f %%, tп = %.3g c\\n', S2.Overshoot, S2.SettlingTime);
 t = (0:1e-3:4)';
 e2 = lsim(feedback(1, L2), Emax*t.^2/2, t);
 fprintf('ν=2: ошибка при Emax*t^2/2: %.4g рад = %.3g угл.мин (треб. <= %g)\\n', e2(end), e2(end)*${P.deg57 ? '57' : '180/pi'}*60, dAE);
-figure('Name', 'ЛР5: ошибка ν=2'); plot(t, e2); xlabel('t, c'); ylabel('\\Delta\\alpha, рад'); title('Ошибка при квадратично возрастающем задании');
+figure('Name', 'Рис. 5.4. Ошибка при εmax·t²/2'); plot(t, e2); xlabel('t, c'); ylabel('\\Delta\\alpha, рад'); title('Ошибка при квадратично возрастающем задании');
 [GmA, PmA] = margin(L2); fprintf('ν=2: Lз = %.3g дБ, θз = %.3g град\\n', 20*log10(GmA), PmA);
 
 %% ===== ν = 1: интегро-дифференцирующий регулятор =====
@@ -509,7 +534,7 @@ Lb  = min(20*log10(KWp./wv), 20*log10(Kep./wv.^2));     % отрезки -20 и 
 Lmin = -60;
 m2 = squeeze(bode(Wzh2, wv));  m1 = squeeze(bode(Wzh1, wv));
 wk = Kep/KWp;  Lk = 20*log10(KWp/wk);                   % контрольная точка A_к
-figure('Name', 'ЛР5: запретная область');
+figure('Name', 'Рис. 5.1. Запретная область и желаемые ЛАЧХ');
 fill([wv fliplr(wv)], [Lb Lmin*ones(size(wv))], [1 0.88 0.88], 'EdgeColor', [0.75 0.2 0.2], 'LineWidth', 1.2); hold on;
 plot(wv, 20*log10(m2), 'Color', [0 0.447 0.741], 'LineWidth', 1.5);
 plot(wv, 20*log10(m1), '--', 'Color', [0.85 0.325 0.098], 'LineWidth', 1.5);
@@ -524,17 +549,17 @@ hold off;
 Wrp1 = Wzh1/sys8
 Krp1 = ${m(a1.K)}; T1i = ${m(a1.T1)}; T2i = ${m(a1.T2)}; T3i = ${m(a1.T3)}; T4i = ${m(a1.T4)};
 Wrp1a = tf(Krp1*conv([T2i 1], [T3i 1]), conv([T1i 1], [T4i 1]))
-figure('Name', 'ЛР5: ЛАЧХ РП (ν=1)'); bodemag(Wrp1, Wrp1a, {1e-2, 1e4}); grid on;
+figure('Name', 'Рис. 5.6. ЛАЧХ регулятора положения, ν = 1'); bodemag(Wrp1, Wrp1a, {1e-2, 1e4}); grid on;
 legend('W_{рп}(s) точная', 'аппроксимация'); title('ЛАЧХ регулятора положения, ν = 1');
 L1 = Wrp1a*sys8;  Phi1 = feedback(L1, 1);
-figure('Name', 'ЛР5: α(t) ν=1'); step(Phi1, 2); grid on; title('Переходная характеристика по заданию, ν = 1');
+figure('Name', 'Рис. 5.7. α(t), ν = 1'); step(Phi1, 2); grid on; title('Переходная характеристика по заданию, ν = 1');
 S1 = stepinfo(Phi1); fprintf('ν=1: sigma = %.1f %%, tп = %.3g c\\n', S1.Overshoot, S1.SettlingTime);
 e1 = lsim(feedback(1, L1), Wmax*t, t);
 fprintf('ν=1: ошибка при Wmax*t: %.4g рад = %.3g угл.мин (треб. <= %g)\\n', e1(end), e1(end)*${P.deg57 ? '57' : '180/pi'}*60, dAW);
-figure('Name', 'ЛР5: ошибка ν=1'); plot(t, e1); xlabel('t, c'); ylabel('\\Delta\\alpha, рад'); title('Ошибка при линейно возрастающем задании');
+figure('Name', 'Рис. 5.8. Ошибка при Ωmax·t'); plot(t, e1); xlabel('t, c'); ylabel('\\Delta\\alpha, рад'); title('Ошибка при линейно возрастающем задании');
 
 % Полные модели Simulink (рис. 5.5 и 5.10) — скрипты lr5_model_pid.m и lr5_model_id.m
-`;
+` + savePng;
   }
   function posModel(R, kind, digital) {
     const name = (digital ? 'lr6' : 'lr5') + '_model_' + kind;
@@ -609,6 +634,7 @@ ${regp}
   }
   function runsPos(kind, inGain, mcGain, tag, P) {
     const nu = kind === 'pid' ? 2 : 1;
+    const lr = tag === 'ЛР5' ? 5 : 6, f0 = lr === 5 ? (nu === 2 ? 3 : 7) : (nu === 2 ? 1 : 4);
     return `
 ${plotStyle}% 1) ступенчатое задание αз = 1 рад
 set_param([mdl '/k_step'], 'Gain', '1'); set_param([mdl '/k_in'], 'Gain', '0'); set_param([mdl '/k_mc'], 'Gain', '0');
@@ -617,20 +643,20 @@ t = a.time; A = a.signals.values;
 [Am, km] = max(A); sigma = (Am - 1)*100;
 ts = t(find(abs(A - 1) > 0.05, 1, 'last'));
 fprintf('${tag}, ν=${nu}: sigma = %.1f %%, время регулирования (5%%) = %.3g c\\n', sigma, ts);
-figure('Name', '${tag}: α(t) ν=${nu}'); plot(t, A); xlabel('t, c'); ylabel('\\alpha(t), рад'); title('Переходная характеристика по задающему воздействию');
+figure('Name', 'Рис. ${lr}.${f0}. α(t), ν = ${nu}'); plot(t, A); xlabel('t, c'); ylabel('\\alpha(t), рад'); title('Переходная характеристика по задающему воздействию');
 % 2) ${kind === 'pid' ? 'квадратично возрастающее задание εmax*t^2/2' : 'линейно возрастающее задание Ωmax*t'}
 set_param([mdl '/k_step'], 'Gain', '0'); set_param([mdl '/k_in'], 'Gain', num2str(${inGain}, 10));
 out = sim(mdl, 'StopTime', '4'); e = out.get('e_pos');
 fprintf('${tag}, ν=${nu}: установившаяся ошибка = %.4g рад = %.3g угл. мин\\n', e.signals.values(end), e.signals.values(end)*${P.deg57 ? '57' : '180/pi'}*60);
-figure('Name', '${tag}: ошибка ν=${nu}'); plot(e.time, e.signals.values); xlabel('t, c'); ylabel('\\Delta\\alpha, рад'); title('Ошибка при ${kind === 'pid' ? 'квадратично' : 'линейно'} возрастающем задании');
+figure('Name', 'Рис. ${lr}.${f0 + 1}. Ошибка, ν = ${nu}'); plot(e.time, e.signals.values); xlabel('t, c'); ylabel('\\Delta\\alpha, рад'); title('Ошибка при ${kind === 'pid' ? 'квадратично' : 'линейно'} возрастающем задании');
 % 3) ${kind === 'pid' ? 'квадратично' : 'линейно'} возрастающий момент сопротивления
 set_param([mdl '/k_in'], 'Gain', '0'); set_param([mdl '/k_mc'], 'Gain', num2str(${mcGain}, 10));
 out = sim(mdl, 'StopTime', '4'); e = out.get('e_pos');
 fprintf('${tag}, ν=${nu}: моментная составляющая ошибки = %.4g рад = %.3g угл. мин\\n', e.signals.values(end), e.signals.values(end)*${P.deg57 ? '57' : '180/pi'}*60);
-figure('Name', '${tag}: моментная ошибка ν=${nu}'); plot(e.time, e.signals.values); xlabel('t, c'); ylabel('\\Delta\\alpha^м, рад'); title('Моментная составляющая ошибки');
+figure('Name', 'Рис. ${lr}.${f0 + 2}. Моментная составляющая ошибки, ν = ${nu}'); plot(e.time, e.signals.values); xlabel('t, c'); ylabel('\\Delta\\alpha^м, рад'); title('Моментная составляющая ошибки');
 set_param([mdl '/k_step'], 'Gain', '1'); set_param([mdl '/k_mc'], 'Gain', '0');
 save_system(mdl);
-`;
+` + savePng;
   }
 
   /* ---------------- ЛР6 ---------------- */
@@ -669,7 +695,7 @@ Wrp1 = minreal(sys3)
 ${plotStyle}figure('Name', 'ЛР6: ЛАЧХ регуляторов'); bode(Wrp2, Wrp1); grid on; legend('ν = 2 (ПИД)', 'ν = 1 (ИД)');
 % Модели Simulink (рис. 6.1 и 6.5) — lr6_model_pid.m и lr6_model_id.m
 % Программы CoDeSys — PLC_PRG_RP2.st и PLC_PRG_RP1.st
-` + fallbacks;
+` + savePng + fallbacks;
   }
   function lr6model(R, kind) {
     const l6 = R.lr6, ss4 = R.lr4.ss4;
@@ -712,6 +738,10 @@ D_rp = ${mmat(ss.D)};
     и строят графики. Готовую модель можно открыть и править вручную.
  4. Файлы *.st — рабочие программы цифровых регуляторов для CoDeSys
     (ПЛК154): создайте POU «PLC_PRG» на языке ST и вставьте текст.
+ 5. Окна с графиками подписаны номерами рисунков сайта («Рис. 3.2. …»)
+    и автоматически сохраняются в PNG (200 dpi) в папку figures рядом
+    со скриптом: lr3_model_Ris_3_2.png и т. п. Отключить: в начале
+    скрипта поставить save_figs = false.
 
 Состав:
   LR1/lr1_raschet.m          выбор двигателя, ТП, ТГ, ВТ
